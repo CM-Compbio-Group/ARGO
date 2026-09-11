@@ -10,7 +10,7 @@
 #' 
 
 ## run these to get the input data
-# source('src/scripts/00-load-packages.R')
+source('src/scripts/00-load-packages.R')
 # source('src/scripts/0B-load-data-for-modeling.R')
 source('src/R/nll_and_gradients.R')
 

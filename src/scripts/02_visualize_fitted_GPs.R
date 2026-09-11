@@ -4,9 +4,9 @@
 #' returns list of fitted plots for the genes
 
 ## load fitted kernel params
-# params <- read_rds('output/{KERNEL}_kernel_params.rds')
-# kernel_params <- do.call('rbind', params) 
-# colnames(kernel_params) <- c('bandwidth', 'sigma_f', 'sigma_d', 'sigma_n1', 'sigma_n2', 'sigma_n3')
+kernelParams <- read_rds(glue('output/{KERNEL}_kernel_params.rds'))
+params <- do.call('rbind', kernelParams)
+colnames(params) <- c('bandwidth', 'sigma_f', 'sigma_d', 'sigma_n1', 'sigma_n2', 'sigma_n3')
 
 ## make the posterior predictive plots for given list of genes
 source('src/R/posterior_predictive_plots.R')
