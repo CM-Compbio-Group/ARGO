@@ -6,7 +6,7 @@ posterior_predictive_plots <- function(gene, y, par, r_x, r_t, r_tx,
                                        x_observed, x_test, P_obs,
                                        dsqx, dsqt, dsqtx, B, N, M,
                                        slides_per_group, noise_diag, 
-                                       kernel = 'RBF', 
+                                       KERNEL = 'RBF', 
                                        fit_donor = F,
                                        cov_donor,
                                        meta, 
@@ -17,10 +17,10 @@ posterior_predictive_plots <- function(gene, y, par, r_x, r_t, r_tx,
   ## function arguements are
   # par : GP parameters for the gene / gene
   # obs / test coordinates
-  # SE kernel pairwise distance (dsqx, dsqt)
+  # SE KERNEL pairwise distance (dsqx, dsqt)
   # B : coregionalization matrix
   # noise_diag : slide-specific noise  
-  # kernel : RBF / Matern --- what cov kernel to fit to data
+  # KERNEL : RBF / Matern --- what cov KERNEL to fit to data
   
   ## extract GP parameters
   bw = par[1]
@@ -30,22 +30,22 @@ posterior_predictive_plots <- function(gene, y, par, r_x, r_t, r_tx,
   n_slides <- sum(slides_per_group)
   Sigma <- diag(sigma_n[noise_diag] ^ 2)
   
-  ## compute covariance kernels
-  if(kernel == 'RBF'){
+  ## compute covariance KERNELs
+  if(KERNEL == 'RBF'){
     Kxx <- sigma_f^2 * exp(-0.5 * dsqx / (bw^2))
     Ktt <- sigma_f^2 * exp(-0.5 * dsqt / (bw^2))
     Ktx <- sigma_f^2 * exp(-0.5* dsqtx / (bw^2))
-  }else if(kernel == 'Matern5'){
-    ## compute explicitly for each case. only two computations for each kernel
+  }else if(KERNEL == 'Matern5'){
+    ## compute explicitly for each case. only two computations for each KERNEL
     Kxx <- sigma_f^2 * (1 + (sqrt(5)*r_x / bw) + 5*dsqx/(3*bw^2)) * exp(-(sqrt(5)*r_x / bw))
     Ktt <- sigma_f^2 * (1 + (sqrt(5)*r_t / bw) + 5*dsqt/(3*bw^2)) * exp(-(sqrt(5)*r_t / bw))
     Ktx <- sigma_f^2 * (1 + (sqrt(5)*r_tx / bw) + 5*dsqtx/(3*bw^2)) * exp(-(sqrt(5)*r_tx / bw))
-  } else if(kernel == 'Matern3'){
+  } else if(KERNEL == 'Matern3'){
     Kxx <- sigma_f^2 * (1 + sqrt(3)*r_x / bw) * exp(-sqrt(3)*r_x / bw)
     Ktt <- sigma_f^2 * (1 + sqrt(3)*r_t / bw) * exp(-sqrt(3)*r_t / bw)
     Ktx <- sigma_f^2 * (1 + sqrt(3)*r_tx / bw) * exp(-sqrt(3)*r_tx / bw)
   }else{
-    stop(sprintf("Unsupported kernel type: '%s'. Choose 'RBF' or 'Matern5' or 'Matern3.", kernel))
+    stop(sprintf("Unsupported KERNEL type: '%s'. Choose 'RBF' or 'Matern5' or 'Matern3.", KERNEL))
   }
   
   
@@ -127,6 +127,7 @@ posterior_predictive_plots <- function(gene, y, par, r_x, r_t, r_tx,
     labs(x = 'Isodepth', y = gene, fill = "Donor") +
     theme_classic(base_size = 12) +
     theme(
+      axis.title.y = element_text(size = 16),
       panel.grid = element_blank(),
       strip.text = element_text(size = 16, face = "bold"),
       axis.text = element_text(color = "black"),

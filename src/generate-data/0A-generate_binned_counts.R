@@ -81,7 +81,7 @@ image(table(bin_meta$bin, bin_meta$batch))
 ## save domain coordinates for downstream functions
 x_observed <- sort(unique(bin_meta$coord_x)); (N <- length(x_observed))
 x_test <- sort(unique(obs$binned_isodepth)); (M <- length(x_test))
-save(x_observed, x_test, N, M, file = 'data/temp/domain.rdata')
+save(x_test, M, file = 'data/temp/test_domain.rdata')
 #--------------------------------
 ##!!!!! ordering by factor orders by the levels !!!!!!##
 binned_counts <- binned_counts[as.character(bin_meta$slide_bin), ] 

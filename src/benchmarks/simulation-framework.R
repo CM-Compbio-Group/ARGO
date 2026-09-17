@@ -26,7 +26,7 @@ colnames(fittedParams) <- c('gene','bandwidth', 'sigma_f', 'sigma_d', 'sigma_n1'
 fittedParams
 
 ## get ranges for noise parameters
-param_range <- sapply(fittedParams %>% select(bandwidth, sigma_f, sigma_n2, sigma_n3), quantile, probs = c(.25, .75))
+param_range <- sapply(fittedParams %>% dplyr::select(bandwidth, sigma_f, sigma_n2, sigma_n3), quantile, probs = c(.25, .75))
 #---------------------------------------------------------------
 #---------------------------------------------------------------
 T <- 100
@@ -96,17 +96,22 @@ for(idx in seq_len(N_CURVES)){
 #--------------------------------------------------------------------
 ## for every curve, I store the data as an (n_sample x n_condition) x observed-time-points matrix 
 ## define experiment structure
+n_samples <- 3 # 3 observations per condition 
 condition_vector <- factor(rep(c('A', 'B'), each = n_samples)); K <- length(levels(condition_vector))
 W <- model.matrix(~0 + condition_vector)
 B <- tcrossprod(W)
 noise_diag <- as.numeric(condition_vector)
-n_samples <- 3 # 3 observations per condition 
+
 
 ## inference is made on downsampled data
 ## we then fit counts to original time points and compare with ground truth
 obs_bins <- seq(1, T, by = 4) # observed bins
 x_observed <- domain_x[obs_bins]; N <- length(x_observed)
 x_test <- domain_x; M <- length(x_test)
+
+## set noise levels relative to signal noise
+noise_min <- param_range[1, 'sigma_f'] / 2
+noise_max <- param_range[1, 'sigma_f'] / 1
 
 data <- list()
 for(CURVEIDX in seq_len(N_CURVES)){
@@ -118,14 +123,13 @@ for(CURVEIDX in seq_len(N_CURVES)){
     
     u_2 <- latent_curves[[CURVEIDX]][['perturbed']][[jj]][obs_bins]
     ## draw observation variance for the two conditions
-    ## I'm using noise levels for the adult and old conditions
-    sigma_1 <- runif(1, min = param_range[1, 'sigma_n2'], max = param_range[1, 'sigma_n2'])
-    sigma_2 <- runif(1, min = param_range[1, 'sigma_n3'], max = param_range[1, 'sigma_n3'])
+    
+    sigma <- runif(2, min = noise_min, max = noise_max)
     
     # expt1rate data 
     # it cycles through elements by column
-    y_1 <- matrix(u_1 + rnorm(n_samples*length(u_1), mean = 0, sd = sigma_1), nrow = n_samples, byrow = T)
-    y_2 <- matrix(u_2 + rnorm(n_samples*length(u_2), mean = 0, sd = sigma_2), nrow = n_samples, byrow = T)
+    y_1 <- matrix(u_1 + rnorm(n_samples*length(u_1), mean = 0, sd = sigma[1]), nrow = n_samples, byrow = T)
+    y_2 <- matrix(u_2 + rnorm(n_samples*length(u_2), mean = 0, sd = sigma[2]), nrow = n_samples, byrow = T)
     
     ## append data to list in long format so I can append them all to make data matrix
     data[[CURVEIDX]][[jj]] <- c(t(rbind(y_1, y_2)))

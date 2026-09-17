@@ -19,8 +19,10 @@ ordered_slides <- slide_df$batch
 slides_per_age <- slide_df %>% dplyr::count(age) %>% pull(n)
 n_slides <- nrow(slide_df)
 
-## load the coordinate points (observed and test data points)
-load('data/temp/domain.rdata') 
+## load the coordinate points (test data points)
+## observed data must include the padding
+x_observed <- sort(unique(bin_meta$coord_x)); N <- length(x_observed)
+load('data/temp/test_domain.rdata')
 #--------------------------------------------------------------------
 ## build the full unobserved regular spatial grid (n_slides x N)
 #--------------------------------------------------------------------

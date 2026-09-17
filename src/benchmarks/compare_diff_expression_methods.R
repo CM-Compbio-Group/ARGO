@@ -1,4 +1,8 @@
 ## gather all results and make plots
+library(readxl)
+# library(enrichR)
+library(PRROC)
+
 setwd('/Volumes/umms-congma1/users/vravik/funGP-mouse_ageing/expression-modeling/')
 source('src/scripts/00-load-packages.R')
 
@@ -37,6 +41,7 @@ res.list
 
 write_rds(res.list, glue('output/{CONTRAST}_DGE_res_list.rds'))
 
+res.list <- read_rds(glue('output/{CONTRAST}_DGE_res_list.rds'))
 #====================================================#
 ## run enrichment analysis against genesets
 #====================================================#
@@ -45,7 +50,7 @@ pval_thresh <- 0.01
 res.thresh <- lapply(res.list, function(df) filter(df, neglogp > -log(pval_thresh)))
 sapply(res.thresh, nrow)
 
-library(enrichR)
+
 dbs <- 'GTEx_Aging_Signatures_2021'
 dbs <- c("GO_Biological_Process_2026", "TISSUES_Curated_2025", "MSigDB_Hallmark_2020",
          "CellMarker_2024", "GTEx_Aging_Signatures_2021", "Tabula_Muris",
@@ -86,6 +91,36 @@ res.fungp %>% filter(gene %in% genes)
 #-------------------------------------------------------------------------
 ## aging-signature genes from https://www.cell.com/cell/fulltext/S0092-8674%2823%2900805-X
 #-------------------------------------------------------------------------
+source('src/R/get_ranked_dge_plot.R')
+
+gt <- read_xlsx('data/sheets/NIHMS1924184-supplement-11.xlsx', sheet = 2, skip = 1) 
+gt <- gt %>% filter(`Gene Symbol` %in% res.fungp$gene)
+
+xx <- res.fungp$gene[1:25]
+idx <- grep(paste(xx, collapse = '|'), gt$`Gene Symbol`)
+xg <- setdiff(xx, gt[idx, ]$`Gene Symbol`)
+
+intersect(xg, gt.ximerakis)
+intersect(xg, gt.jin)
+
+
+filter(res.fungp, gene %in% xg)
+
+
+table(gt$Region)
+idx <- grep('olfactory bulb|cerebellum|pons|medulla', gt$Region, ignore.case = T)
+gt <- gt[-idx, ]
+
+
+table(gt$`Signature class`)
+## restrict to the profiled domains in MERFISH study
+# idx <- grep('olfactory bulb|cerebellum|pons|medulla', gt$`Signature class`, ignore.case = T)
+# idx <- grep('cas|2-9 regions|caudate putamen|corpus callosum|motor cortex|svz', gt$`Signature class`, ignore.case = T)
+
+
+length(unique(gt$`Gene Symbol`))
+markers <- unique(gt$`Gene Symbol`)
+
 cas <- vroom('data/sheets/cas-genes.txt', delim = '\t')
 
 p1 <- get_ranked_dge_plot(res.fungp, method = 'funGP', markers = cas$`Gene Symbol`)
@@ -105,8 +140,6 @@ cas <- filter(res.fungp, gene %in% cas$`Gene Symbol` & deviation > 0) %>% pull(g
 #----------------------------------------------------------------------------------------
 ## list of age-related differential genes from https://www.nature.com/articles/s41586-024-08350-8#Sec8
 #----------------------------------------------------------------------------------------
-library(readxl)
-library(PRROC)
 ## filtered list of genes with only restricted celltypes
 neuronal.dge <- read_xlsx('data/sheets/cortex_striatum_age_DE_filtered.xlsx', sheet = 1)
 glial.dge <- read_xlsx('data/sheets/cortex_striatum_age_DE_filtered.xlsx', sheet = 2)
@@ -135,6 +168,24 @@ n_thresh <- 1
 # markers <- filter(gene_summary, upreg > n_thresh | downreg > n_thresh) %>% pull(gene)
 
 
+#==========================================================================================
+## ground truth genes from Ximerakis et al (https://www.nature.com/articles/s41593-019-0491-3)
+#==========================================================================================
+gt.1 <- read_xlsx('~/Desktop/41593_2019_491_MOESM10_ESM.xlsx', sheet = 1) %>% filter(Gene %in% res.fungp$gene)
+gt.2 <- read_xlsx('~/Desktop/41593_2019_491_MOESM10_ESM.xlsx', sheet = 2) %>% filter(Gene %in% res.fungp$gene)
+
+markers <- unique(c(gt.1$Gene, gt.2$Gene))
+
+# gt <- filter(gt, Gene %in% res.fungp$gene)
+SX <- 'Jin et al subclass'
+SX <- 'Hahn et al'
+
+p1 <- get_ranked_dge_plot(res.fungp, method = 'funGP', markers = markers)
+p2 <- get_ranked_dge_plot(res.lamian, method = 'lamian', markers = markers)
+pdf(glue('figs/{SX}_ranked-statistics.pdf'), width = 12)
+wrap_plots(p1 | p2)
+dev.off()
+
 #------------------------------------------------------
 ## make the auprc curves
 #------------------------------------------------------
@@ -149,20 +200,24 @@ compute_ranked_auprc <- function(ranked_list, signature){
 
 
 # markers <- gene_summary %>% pull(gene)
-markers <- cas
+markers <- gt$Gene
 # signature <- CAS$`Gene Symbol`
+
+# SX <- 'Jin et al aging markers'
+# SX <- 'Common Aging Signature'
+SX <- 'Jin et al cluster'
+
+
+cols <- c( 'red3', 'lightskyblue2', 'lightgreen', 'lightpink2', 'lightsalmon', 'orchid2')
 ## Rank is based on directional statistics!
 ## I only want to rank by p-values!!
 pr.curves <- lapply(res.list, function(df)  {
-      compute_ranked_auprc(df %>% arrange(desc(neglogp)) %>% pull(gene), signature = markers)
-    }
-  )
+    compute_ranked_auprc(df %>% arrange(desc(neglogp)) %>% pull(gene), signature = markers)
+  }
+)
 
-# SX <- 'Jin et al aging markers'
-SX <- 'Common Aging Signature'
-cols <- c( 'red3', 'lightskyblue2', 'lightgreen', 'lightpink2', 'lightsalmon', 'orchid2')
 
-pdf(glue('figs/{CONTRAST}_AUPRC_comparative_{SX}_filtered.pdf'), width = 8, height = 8)
+pdf(glue('figs/{CONTRAST}_AUPRC_comparative_{SX}_age_correlated.pdf'), width = 8, height = 8)
 par(mfrow = c(1,1), mar = c(8, 6, 4, 2) + 0.1, family = 'Arial', ps=16)
 plot(pr.curves[['funGP']], col = adjustcolor(cols[1], alpha.f = 1), main = glue("{SX} \n Precision-Recall Curve"), 
      auc.main = F, lty=2)
