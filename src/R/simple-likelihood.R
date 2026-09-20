@@ -7,7 +7,7 @@
 computeNegLogLikelihoodGradient <- function(par, x, y, N, r, r_squared,
                                             noise_diag,
                                             B, lambda, 
-                                            kernel = 'RBF'){
+                                            KERNEL = 'RBF'){
   
   ## derive the gradients wrt parameters
   gradients <- numeric(length=length(par))
@@ -18,23 +18,23 @@ computeNegLogLikelihoodGradient <- function(par, x, y, N, r, r_squared,
   sigma_n <- exp(par[3:length(par)])
   Sigma <- diag(sigma_n[noise_diag]^2)
   
-  ## compute the covariance kernel for the icm process
-  if(kernel == 'RBF'){
+  ## compute the covariance KERNEL for the icm process
+  if(KERNEL == 'RBF'){
     K_kernel <- sigma_f^2 * exp(-0.5 * r_squared / (bw^2)) 
     dKbw <- K_kernel * r_squared / (bw^3)
-  } else if(kernel == 'Matern5'){
+  } else if(KERNEL == 'Matern5'){
     matern_exp <- sqrt(5)*r / bw
     K_kernel <- sigma_f^2 * (1 + matern_exp + 5*r_squared / (3*bw^2)) * exp(-matern_exp)
     dKbw <- sigma_f^2 / (3*bw) * exp(-matern_exp) * (5*r_squared / (bw^2)) * (1 + matern_exp)
-  }else if(kernel == 'Matern3'){
+  }else if(KERNEL == 'Matern3'){
     matern_exp <- sqrt(3)*r / bw
     K_kernel = sigma_f^2 * (1 + matern_exp) * exp(-matern_exp)
     dKbw <- sigma_f^2 * exp(-matern_exp) * (3*r_squared / (bw^3))
   }else {
-    stop(sprintf("Unsupported kernel type: '%s'. Choose 'RBF' or 'Matern5' or 'Matern3.", kernel))
+    stop(sprintf("Unsupported KERNEL type: '%s'. Choose 'RBF' or 'Matern5' or 'Matern3.", KERNEL))
   }
   
-  ## this is the full covariance kernel
+  ## this is the full covariance KERNEL
   K <- kronecker(B, K_kernel) + kronecker(Sigma, diag(N)) + 1e-6 * diag(length(y))
   
   ## compute terms for gradient
@@ -45,7 +45,7 @@ computeNegLogLikelihoodGradient <- function(par, x, y, N, r, r_squared,
   P <- tcrossprod(alpha) - K_inv
   
   
-  ## gradients wrt covariance kernel parameters
+  ## gradients wrt covariance KERNEL parameters
   ## tr AB = sum(A * t(B)) (sum of elementwise product)
   ## gradient wrt bandwidth
   gradients[1] <- -0.5 * sum(P * t(kronecker(B, dKbw)))
@@ -72,31 +72,31 @@ computeNegLogLikelihoodGradient <- function(par, x, y, N, r, r_squared,
 computeNegLogLikelihood <- function(par, x, y, N, r, r_squared,
                                     noise_diag,
                                     B, lambda, 
-                                    kernel = 'RBF' ){
+                                    KERNEL = 'RBF' ){
   
   
   # extract current parameter values
-  bw <- exp(par[1]) ## bandwidth of kernel
+  bw <- exp(par[1]) ## bandwidth of KERNEL
   sigma_f <- exp(par[2]) ## scale of squared-exponential noise
   sigma_n <- exp(par[3:length(par)]) ## noise terms for each timepoint
   Sigma <- diag(sigma_n[noise_diag]^2)
   
   
-  if(kernel == 'RBF'){
+  if(KERNEL == 'RBF'){
     K_kernel <- sigma_f^2 * exp(-0.5 * r_squared / (bw^2)) 
-  } else if(kernel == 'Matern5'){
+  } else if(KERNEL == 'Matern5'){
     matern_exp <- sqrt(5)*r / bw
     K_kernel <- sigma_f^2 * (1 + matern_exp + 5 * r_squared / (3 * bw^2)) * exp(-matern_exp)
-  }else if(kernel == 'Matern3'){
+  }else if(KERNEL == 'Matern3'){
     matern_exp <- sqrt(3)*r / bw
     K_kernel = sigma_f^2 * (1 + matern_exp) * exp(-matern_exp)
   }else {
-    stop(sprintf("Unsupported kernel type: '%s'. Choose 'RBF', 'Matern5' or 'Matern3.", kernel))
+    stop(sprintf("Unsupported KERNEL type: '%s'. Choose 'RBF', 'Matern5' or 'Matern3.", KERNEL))
   }
   
   
-  ## cov kernel for full data
-  ## add a numerical-safety jitter term to the covariance kernel
+  ## cov KERNEL for full data
+  ## add a numerical-safety jitter term to the covariance KERNEL
   K <- kronecker(B, K_kernel) + kronecker(Sigma, diag(N)) +  1e-6 * diag(length(y))
   
   ## supporting constants

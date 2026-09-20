@@ -1,14 +1,16 @@
 ## return posterior predictive plots for the genes given the parameter fits
-simple_posterior_fit <- function(expt) {
+simple_posterior_fit <- function(gene) {
   
   ## pick out variable and parameters
-  y <- simx.data %>% pull(expt)
-  par <- params[expt, ]
+  y <- bin_meta %>% pull(gene)
+  par <- params[gene, ]
   ## extract GP parameters
   bw = par[1]
   sigma_f = par[2]
   sigma_n = par[3:length(par)]
-  n_slides <- n_samples * length(levels(condition_vector))
+  
+  K <- length(levels(bin_meta$condition))
+  n_slides <- n_samples * K
   Sigma <- diag(sigma_n[noise_diag] ^ 2)
   
   ## compute covariance KERNELs
@@ -47,7 +49,7 @@ simple_posterior_fit <- function(expt) {
   gp_df <- data.frame(
     y_gp    = as.vector(y_pred),
     coord_x = rep(x_test, times = n_slides),
-    condition     = rep(levels(condition_vector), each = n_samples * M)
+    condition     = rep(levels(bin_meta$condition), each = n_samples * M)
   )
   
   # 2. Compute the mean trajectory across slides within each age group
@@ -56,7 +58,7 @@ simple_posterior_fit <- function(expt) {
     summarize(y_gp = mean(y_gp), .groups = "drop")
   
   # 3. Plot the clean mean curve
-  p <- ggplot(data = simx.data, aes(x = coord_x, y = !!sym(expt), fill = SampleID)) +
+  p <- ggplot(data = bin_meta, aes(x = coord_x, y = !!sym(gene), fill = sample)) +
     geom_jitter(
       width = 0.015,
       height = 0,
@@ -72,10 +74,10 @@ simple_posterior_fit <- function(expt) {
       color = 'red', linewidth = 0.75, alpha = .85,
       inherit.aes=F
     ) + 
-    # ggtitle(expt) + 
+    # ggtitle(gene) + 
     facet_wrap(~ condition) +
-    ylim(quantile(simx.data %>% pull(expt), c(0.005, 0.995), na.rm = TRUE)) +
-    labs(x = 'Isodepth', y = expt, fill = "sample") +
+    ylim(quantile(bin_meta %>% pull(gene), c(0.005, 0.995), na.rm = TRUE)) +
+    labs(x = 'Isodepth', y = gene, fill = "sample") +
     theme_classic(base_size = 12) +
     theme(
       panel.grid = element_blank(),

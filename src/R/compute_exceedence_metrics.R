@@ -30,11 +30,3 @@ compute_exceedence_metrics <- function(res, x_test){
 }
 
 
-binarize_statistic_curves <- function(stat, band){
-  res <- case_when(
-    stat < -band ~ -1,
-    stat > band ~ 1,
-    TRUE ~ 0
-  )
-  
-}

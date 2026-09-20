@@ -2,7 +2,7 @@
 ## compute the distribution of the test statistic under null hypothesis 
 ## for the given contrast vector. return analytical p-value and (index of) max deviation
 
-simple_contrast_test_with_funGP <- function(contrast_vector, expt,
+simple_contrast_test_with_funGP <- function(contrast_vector, gene,
                                            return_conf_band = TRUE,
                                            alpha = 0.95,
                                            n_mc = 1000 # no.of monte carlo samples
@@ -11,8 +11,8 @@ simple_contrast_test_with_funGP <- function(contrast_vector, expt,
   
   
   ## pick out variable and parameters
-  y <- simx.data %>% pull(expt)
-  par <- params[expt, ]
+  y <- bin_meta %>% pull(gene)
+  par <- params[gene, ]
   
   ## derive the design matrix given the contrast vector 
   cc <- generate_cc_matrix(contrast_vector)

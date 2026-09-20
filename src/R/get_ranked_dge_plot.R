@@ -1,3 +1,4 @@
+require(ggrepel)
 get_ranked_dge_plot <- function(df, statistic = 'neglogp',CONTRAST = 'old_vs_adult', method = 'MAST', markers){
   
   df <- df %>% arrange(desc(!!sym(statistic))) %>% mutate(Rank = row_number())
