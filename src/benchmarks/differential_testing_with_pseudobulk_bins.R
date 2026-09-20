@@ -14,44 +14,7 @@ source('src/R/get_cct_neglogp.R')
 source('src/R/summarize_dge_results.R')
 source('src/R/get_ranked_dge_plot.R')
 
-## load counts data
-load('data/scdesign_simulation.rdata')
-
-## prepare pseudobulk counts and prepare deseq object
-sim_meta <-  sim_meta%>% 
-             mutate(bin = factor(ntile(pseudotime, n = 25)), 
-                    sample_bin = paste(sample, bin, sep = '_'),
-                    condition_bin = paste(condition, bin, sep = '_'))
-
-sim_meta <- sim_meta %>% mutate(condition_bin = factor(condition_bin, 
-                                                       levels =  gtools::mixedsort(unique(condition_bin))),
-                                sample_bin = factor(sample_bin, 
-                                                       levels = gtools::mixedsort(unique(sample_bin)))) 
-
-sim_meta <- right_join(sim_meta, sim_meta %>% group_by(bin) %>% 
-                         summarise(coord_x = mean(pseudotime)), by = 'bin')
-
-sim_meta
-
-## prepare bin level metadata
-bin_meta <- sim_meta %>% dplyr::count(condition, replicate, sample, 
-                                      coord_x, bin, condition_bin, sample_bin,
-                                      name = 'n_cells') %>% 
-  distinct() %>% 
-  arrange(sample_bin)
-
-## convert counts to pseudobulk values
-binned_counts <- rowsum(t(sim_counts), group = sim_meta$sample_bin)
-all(rownames(binned_counts) == bin_meta$sample_bin)
-
-dds <- DESeqDataSetFromMatrix(countData = t(binned_counts),
-                                  colData = bin_meta,
-                                  design = ~ condition_bin)
-dds <- estimateSizeFactors(dds)
-
-## visualize counts for some genes
-plotCounts(dds, gene = 'Npepl1', intgroup = 'bin')
-plotCounts(dds, gene = 'Hist1h1c', intgroup = 'bin')
+load('output/simulations/deseq_objects.rdata')
 #===================================================================
 ## run differential testing with deseq
 #===================================================================
@@ -74,7 +37,7 @@ deseq_res <- summarize_dge_results(res.list, genes = rownames(dds),
                                    pval = 'pvalue', lfc = 'log2FoldChange')
 
 ## summarize findings
-p1 <- get_ranked_dge_plot(deseq_res$dge, method = 'DESeq2', markers = null_genes)
+p1 <- get_ranked_dge_plot(deseq_res$dge, method = 'DESeq2', markers = effect_genes)
 with(deseq_res$dge, plot(neglogp~max.lfc, pch=20, col = adjustcolor("red", alpha.f = 0.5)))
 deseq_res$dge %>% filter(fdr < 0.05) %>% with(table(max.lfc > 0))
 deseq_res$dge %>% filter(fdr < 0.05) %>% with(table(gene %in% null_genes)) ## how many control genes are being called differential
@@ -112,7 +75,7 @@ for(bin in seq_len(25)){
 names(res.list[[1]])
 edger_res <- summarize_dge_results(res.list, genes = rownames(dds), pval = 'PValue', lfc = 'logFC')
 
-p2 <- get_ranked_dge_plot(edger_res$dge, method = 'edgeR', markers = null_genes)
+p2 <- get_ranked_dge_plot(edger_res$dge, method = 'edgeR', markers = effect_genes)
 with(edger_res$dge, plot(neglogp~max.lfc, pch=20, col = adjustcolor("red", alpha.f = 0.5)))
 edger_res$dge %>% filter(fdr < 0.05) %>% with(table(max.lfc > 0))
 edger_res$dge %>% filter(fdr < 0.05) %>% with(table(gene %in% null_genes)) ## how many control genes are being called differential
@@ -146,7 +109,7 @@ for(bin in seq_len(25)){
 
 limma_res <- summarize_dge_results(res.list, rownames(dds), pval = 'P.Value', lfc = 'logFC')
 
-(p3 <- get_ranked_dge_plot(limma_res$dge, method = 'limma-voom', markers = null_genes))
+(p3 <- get_ranked_dge_plot(limma_res$dge, method = 'limma-voom', markers = effect_genes))
 with(limma_res$dge, plot(neglogp~max.lfc, pch=20, col = adjustcolor("red", alpha.f = 0.5)))
 limma_res$dge %>% filter(fdr < .05) %>% with(table(max.lfc > 0)) ## 103 upreg; 87 downreg
 limma_res$dge %>% filter(fdr < .05) %>% with(table(gene %in% null_genes)) 
@@ -155,7 +118,6 @@ write_rds(limma_res, file = 'output/simulations/limma_DGE_res.rds')
 pdf('figs/diff_expression_testing_on_simulations.pdf', width = 15, height=6)
 plot(wrap_plots(p1 | p2 | p3))
 dev.off()
-
 #===================================================================
 ## run differential testing with tradeSeq
 #===================================================================
@@ -174,7 +136,7 @@ sce <- fitGAM(counts = counts(dds, normalized = F),
               pseudotime = bin_meta$coord_x, 
               cellWeights = rep(1, nrow(bin_meta)),
               conditions = bin_meta$condition, 
-              nknots = 5, 
+              nknots = 6, 
               verbose = T, 
               parallel = T)
 
@@ -196,7 +158,7 @@ plot(seq(G), condRes$waldStat)
 
 oo <- order(condRes$waldStat, decreasing = TRUE)
 plotSmoothers(sce, assays(sce)$counts,
-              gene = rownames(assays(sce)$counts)[oo[200]],
+              gene = rownames(assays(sce)$counts)[oo[450]],
               alpha = 1, border = TRUE)
 
 res.tradeseq <- condRes %>% arrange(desc(waldStat)) %>% 
@@ -204,17 +166,14 @@ res.tradeseq <- condRes %>% arrange(desc(waldStat)) %>%
          neglogp = -log(pvalue + 1e-16),
          fdr = p.adjust(pvalue, method = 'BH')) %>% as_tibble()
 
-(p4 <- get_ranked_dge_plot(res.tradeseq, method = 'tradeSeq', markers = null_genes))
+(p4 <- get_ranked_dge_plot(res.tradeseq, method = 'tradeSeq', markers = effect_genes))
 res.tradeseq %>% filter(fdr < .05) %>% with(table(gene %in% null_genes)) 
-write_rds(res.tradeseq, file = 'output/simulations/tradeSeq_res.rds')
 
+write_rds(res.tradeseq, file = 'output/simulations/tradeSeq_res.rds')
 #===================================================================
 ## run differential testing with Lamian
 #===================================================================
 ## get normalized counts as input 
-vsd <- varianceStabilizingTransformation(dds, blind = F)
-plotPCA(vsd, intgroup = 'condition')
-
 expr <- assay(vsd)
 range(apply(expr, 1, sd))
 ## pseudotime values
@@ -250,13 +209,14 @@ stat <- res$statistics %>% rownames_to_column('gene') %>%
   arrange(desc(neglogp)) 
 
 
-(p5 <- get_ranked_dge_plot(stat, method = 'Lamian', markers = null_genes))
+(p5 <- get_ranked_dge_plot(stat, method = 'Lamian', markers = effect_genes))
 
 stat %>% filter(fdr.chisq.overall < .05)
 stat %>% filter(fdr.chisq.overall < .05) %>% with(table(gene %in% null_genes)) 
 
 ## save results
 write_rds(res, 'output/simulations/lamian_DGE_res.rds')
+
 wrap_plots(p4 | p5)
 
 write_rds(dds, 'output/simulations/dds.rds')

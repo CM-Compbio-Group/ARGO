@@ -44,7 +44,6 @@ computeNegLogLikelihoodGradient <- function(par, x, y, N, r, r_squared,
   
   P <- tcrossprod(alpha) - K_inv
   
-  
   ## gradients wrt covariance KERNEL parameters
   ## tr AB = sum(A * t(B)) (sum of elementwise product)
   ## gradient wrt bandwidth
@@ -53,7 +52,6 @@ computeNegLogLikelihoodGradient <- function(par, x, y, N, r, r_squared,
   ## gradient for noise term
   dKsf <- (2 / sigma_f) * K_kernel
   gradients[2] <- -0.5 * sum(P*t(kronecker(B, dKsf)))
-  
   
   ## gradient wrt sigma_n terms
   diag_P <- diag(P)
@@ -78,8 +76,8 @@ computeNegLogLikelihood <- function(par, x, y, N, r, r_squared,
   # extract current parameter values
   bw <- exp(par[1]) ## bandwidth of KERNEL
   sigma_f <- exp(par[2]) ## scale of squared-exponential noise
-  sigma_n <- exp(par[3:length(par)]) ## noise terms for each timepoint
-  Sigma <- diag(sigma_n[noise_diag]^2)
+  sigma_n <- exp(par[3:length(par)]) ## noise per condition
+  Sigma <- diag(sigma_n[noise_diag]^2) ## observation noise in data
   
   
   if(KERNEL == 'RBF'){

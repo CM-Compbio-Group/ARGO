@@ -16,8 +16,9 @@ theme_set(theme_bw())
 pancreas_sce <- read_rds('data/PANCREAS_sce.rds')
 print(pancreas_sce)
 
-## reduce to 100 genes
-pancreas_sce <- pancreas_sce[1:200, ]
+## reduce to G genes
+## perturb a small fraction of these genes
+pancreas_sce <- pancreas_sce[1:500, ]
 plot_reduceddim(ref_sce = pancreas_sce, 
                 sce_list = list(),
                 name_vec = c("Reference"),
@@ -90,15 +91,14 @@ mu_B <- mu_A
 t <- PANCREAS_data$dat$pseudotime
 
 ## sample different patterns of condition-specific effects across the genes
-# Randomly assign 25 genes to each pattern
+## 80% of genes are baseline controls
 genes <- rownames(counts(pancreas_sce))
 gene_order <- sample(genes)
 G <- length(genes)
 
-
-# 25 null genes; 75 genes with Gaussian-bump effects
+# choose no.of null genes and effect genes
 gene_order <- sample(genes)
-n_null <- G / 4 # quarter of the genes are unaffected
+n_null <- 4*G / 5 # three-quarters of the genes are unaffected
 null_genes <- gene_order[1:n_null]
 effect_genes <- gene_order[(n_null + 1):G]
 
@@ -113,9 +113,10 @@ lfc_mat <- matrix(
 effect_info <- data.frame(
   gene = effect_genes,
   amplitude = runif(length(effect_genes), 0.5, 1.5),
+  sign = sample(c(-1, 1), size = length(effect_genes), replace = T),
   center = runif(length(effect_genes), 0.2, 0.8),
   bandwidth = sample(
-    c(0.025,0.05, 0.10, 0.20),
+    c(0.025, 0.05, 0.075, 0.10, 0.15),
     length(effect_genes),
     replace = TRUE
   )
@@ -125,22 +126,34 @@ for (j in seq_len(nrow(effect_info))) {
   g <- effect_info$gene[j]
   
   lfc_mat[, g] <-
-    effect_info$amplitude[j] *
+    effect_info$sign[j] * effect_info$amplitude[j] *
     exp(
       -(t - effect_info$center[j])^2 /
         (2 * effect_info$bandwidth[j]^2)
     )
 }
 
+## visualize the effects for some genes
+ord <- order(t)
+plot(sort(t), lfc_mat[ord, 'Malat1'])
+
+pdf('figs/simulation_effect_genes.pdf', width = 12)
+pheatmap(lfc_mat[ord, effect_genes], cluster_rows = F, show_rownames = F)
+dev.off()
+
+
 mu_B <- mu_A * exp(lfc_mat)
 
 matplot(
   t,
   lfc_mat[, effect_info$gene[1:10]],
-  lty = 2, lwd = .5,
+  lty = 2, lwd = .1,
   xlab = "Pseudotime",
   ylab = "True LFC"
 )
+
+
+summary(rowSums(mu_B) / rowSums(mu_A)) # should be centered around 1
 
 
 #===================================================================
@@ -201,3 +214,23 @@ sim_meta <- data.frame(condition = factor(rep(c('condition_A', 'condition_B'),
 
 
 save(sim_counts, sim_meta, truth, file = 'data/scdesign_simulation.rdata')
+
+
+#===================================================================
+## diagnostics on simulated counts data
+#===================================================================
+lib_A <- colSums(do.call(cbind, counts_A))
+lib_B <- colSums(do.call(cbind, counts_B))
+
+boxplot(
+  lib_A, lib_B,
+  names = c("A", "B"),
+  ylab = "Library size"
+)
+
+## mean count shift in simulated data
+mean_A <- rowMeans(do.call(cbind, counts_A)[, , drop = FALSE])
+mean_B <- rowMeans(do.call(cbind, counts_B)[, , drop = FALSE])
+
+hist(log2((mean_B) / (mean_A)))
+
