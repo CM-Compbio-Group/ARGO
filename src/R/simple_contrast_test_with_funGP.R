@@ -2,7 +2,7 @@
 ## compute the distribution of the test statistic under null hypothesis 
 ## for the given contrast vector. return analytical p-value and (index of) max deviation
 
-simple_contrast_test_with_funGP <- function(contrast_vector, gene,
+simple_contrast_test_with_funGP <- function(CONTRAST_VECTOR, gene, par,
                                            return_conf_band = TRUE,
                                            alpha = 0.95,
                                            n_mc = 1000 # no.of monte carlo samples
@@ -12,10 +12,9 @@ simple_contrast_test_with_funGP <- function(contrast_vector, gene,
   
   ## pick out variable and parameters
   y <- bin_meta %>% pull(gene)
-  par <- params[gene, ]
   
   ## derive the design matrix given the contrast vector 
-  cc <- generate_cc_matrix(contrast_vector)
+  cc <- generate_cc_matrix(CONTRAST_VECTOR)
   
   ## unload the GP parameters
   bw = par[1]
@@ -43,7 +42,7 @@ simple_contrast_test_with_funGP <- function(contrast_vector, gene,
   
   ## derive the covariance blocks under the full distribution
   ## evaluate the covariance blocks
-  kk <- length(contrast_vector)
+  kk <- length(CONTRAST_VECTOR)
   S11 <- kronecker(diag(kk), Ktt)
   S12 <- kronecker(t(W), Ktx)
   
@@ -56,7 +55,7 @@ simple_contrast_test_with_funGP <- function(contrast_vector, gene,
   
   ## the test statistic
   mu_hat <- A %*% y
-  fungp_test_statistic <- drop(kronecker(t(contrast_vector), diag(M)) %*% mu_hat)
+  fungp_test_statistic <- drop(kronecker(t(CONTRAST_VECTOR), diag(M)) %*% mu_hat)
   idx <- which.max(abs(fungp_test_statistic)) # index of max deviation in test statistic
   
   
@@ -67,7 +66,7 @@ simple_contrast_test_with_funGP <- function(contrast_vector, gene,
   
   ## derive covariance of the test statistic
   sigma_U_H0 <- A %*% tcrossprod(S22_H0, A)
-  ccx <- kronecker(t(contrast_vector), diag(M))
+  ccx <- kronecker(t(CONTRAST_VECTOR), diag(M))
   sigma_statistic <- ccx %*% tcrossprod(sigma_U_H0, ccx)
   # Force symmetry by averaging with its transpose
   sigma_statistic <- (sigma_statistic + t(sigma_statistic)) / 2

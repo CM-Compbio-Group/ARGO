@@ -1,9 +1,8 @@
 compute_exceedence_metrics <- function(res, x_test){
   stat <- res[['statistic']]
   band <- res[['band']]
+  
   M <- length(x_test)
-  
-  
   ## find max deviation outside the conf bands
   max_dev <- ifelse(any(abs(stat) > band), max(abs(stat)), 0)
   ## compute directional stats 
