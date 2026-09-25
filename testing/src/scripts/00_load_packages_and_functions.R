@@ -23,21 +23,24 @@ library(readxl)
 library(PRROC)
 library(extrafont)
 
-# ## for baseline methods
-# source('src/R/get_cct_neglogp.R')
-# source('src/R/summarize_dge_results.R')
-# source('src/R/get_ranked_dge_plot.R')
+
+## for fitting scDesign and simulating data
+source('testing/src/scripts/fit_scDesign3.R')
+source('testing/src/scripts/generate_perturbed_data.R')
+
+## differential testing
+source('testing/src/scripts/run_differential_testing.R')
+
+## for baseline methods
+source('testing/src/R/get_cct_neglogp.R')
+source('src/R/summarize_dge_results.R')
 # 
-# ## for argo
-# source('src/R/simple-likelihood.R')
-# source('src/R/simple_contrast_test_with_funGP.R')
-# source('src/R/generate_cc_matrix.R')
-# source('src/R/compute_analytical_pvalue.R')
-# source('src/R/derive_KLT_CI_bands.R')
-# source('src/R/plot_conf_bands.R')
-# source('src/R/compute_exceedence_metrics.R')
-# source('src/R/compute_exceedence_statistics.R')
-# 
-# source('src/benchmarks/run_baseline_testing.R')
-# source('src/benchmarks/run_argo.R')
-# source('src/benchmarks/compute_eval_metrics.R')
+## for argo
+source('testing/src/R/run_argo.R')
+source('testing/src/R/simple_likelihood.R')
+source('testing/src/R/simple_contrast_test_with_funGP.R')
+source('testing/src/R/generate_cc_matrix.R')
+source('testing/src/R/compute_analytical_pvalue.R')
+source('testing/src/R/derive_KLT_CI_bands.R')
+
+

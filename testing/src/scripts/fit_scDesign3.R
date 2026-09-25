@@ -5,6 +5,9 @@ fit_scDesign3 <- function(sce){
   #' copula model to learn gene-gene correlation patterns and extracts out the estimated parameters
   #' The learned parameters and correlations are used to simulate new ground truth data with 
   #' specific differential expression patterns
+  
+  
+  message('fitting scDesign3 parameters to provided dataset')
   sce.data <- construct_data(
     sce = sce,
     assay_use = "counts",
