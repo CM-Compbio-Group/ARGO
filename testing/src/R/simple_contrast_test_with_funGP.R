@@ -19,9 +19,14 @@ simple_contrast_test_with_funGP <- function(gene, par, env){
   
   ## compute covariance env$KERNELs
   if(env$KERNEL == 'RBF'){
-    Kxx <- sigma_f^2 * exp(-0.5 * env$dsqx / (bw^2))
-    Ktt <- sigma_f^2 * exp(-0.5 * env$dsqt / (bw^2))
-    Ktx <- sigma_f^2 * exp(-0.5* env$dsqtx / (bw^2))
+    if(env$N == env$M){ # if testing on same points
+      Kxx <- Ktt <- Ktx <- sigma_f^2 * exp(-0.5 * env$dsqx / (bw^2))
+    } else{
+      Kxx <- sigma_f^2 * exp(-0.5 * env$dsqx / (bw^2))
+      Ktt <- sigma_f^2 * exp(-0.5 * env$dsqt / (bw^2))
+      Ktx <- sigma_f^2 * exp(-0.5* env$dsqtx / (bw^2))
+    }
+    
   }else if(env$KERNEL == 'Matern5'){
     ## compute explicitly for each case. only two computations for each env$KERNEL
     Kxx <- sigma_f^2 * (1 + (sqrt(5)*env$r_x / bw) + 5*env$dsqx/(3*bw^2)) * exp(-(sqrt(5)*env$r_x / bw))
@@ -67,8 +72,7 @@ simple_contrast_test_with_funGP <- function(gene, par, env){
   
   ## global analytical p-value against null hypothesis
   fgp_res <- list('statistic' = fungp_test_statistic,
-                  'neglogp' =  compute_analytical_pvalue(sigma_statistic, 
-                                                         fungp_test_statistic),
+                  'neglogp' =  compute_analytical_pvalue(sigma_statistic, fungp_test_statistic),
                   'deviation' = fungp_test_statistic[idx],
                   'index' = idx)
   

@@ -1,4 +1,4 @@
-run_argo <- function(env, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF'){
+run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF'){
   #' run differential testing with argo, first by fitting GP parameters for each gene and then 
   #' running differential testing. 
   #' 
@@ -15,36 +15,31 @@ run_argo <- function(env, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF'){
   
   ## read variables into the current environment (that i want to pass to nested functions)
   N <- env$N
-  M <- env$M
-  genes <- env$genes
+  M <- env$N
+  genes <- rownames(env$sim_counts)
   
   ## control variables
   LAMBDA <- 1 # regularization for noise terms in GP fits
   KLT_CONF_BAND <- TRUE
   CONTRAST_VECTOR <- c(-1, 1)
-  RETURN_CONF_BANDS = TRUE
+  RETURN_CONF_BANDS = FALSE
   conf_level_alpha = 0.95
   n_monte_carlo_simulations = 1000 # no.of monte carlo samples
-  #===================================================================
-  ## prepare normalized counts data for running argo
-  #===================================================================
-  # normalize counts using DESeq variance stabilizing transform
-  # append centered, normalized counts to metadata object to use with fitting
-  bin_meta <- bin_level_meta %>%
-    bind_cols(scale(t(assay(vsd)), center = T, scale = F))
   
   #===================================================================
   ## prepare covariates for fitting and testing
   #===================================================================
   ## get variables for fitting continuous-time models
   x_observed <- sort(unique(cell_level_meta$coord_x)); 
-  x_test <- sort(unique(cell_level_meta$test_x)); 
+  x_test <- x_observed; # fitting to same points, not performing any imputation 
   
   ## define cov kernel exponents
   ## pairwise distances and dist-squared
   r_x <- as.matrix(dist(x_observed)); dsqx <-  r_x^2
-  r_t <- as.matrix(dist(x_test)); dsqt <-  r_t^2
-  r_tx <- rdist::cdist(x_test, x_observed) ; dsqtx <- r_tx^2
+  r_t <- r_x; dsqt <- dsqx
+  r_tx <- r_x; dsqtx <- dsqx
+  # r_t <- as.matrix(dist(x_test)); dsqt <-  r_t^2
+  # r_tx <- rdist::cdist(x_test, x_observed) ; dsqtx <- r_tx^2
   
   #===================================================================
   ## prepare co-regionalization and noise matrices for GP fitting
@@ -70,7 +65,8 @@ run_argo <- function(env, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF'){
   max_bw <- 3*diff(range(x_observed))
   max_log_bw <- log(max_bw)
   
-  kernelParams <- list()
+  message('now fitting gp parameters')
+  kernel_params <- list()
   for(gene in genes){
     y <- bin_meta %>% pull(gene)
     log_bw <- runif(1, log(.1), log(.5))
@@ -96,18 +92,19 @@ run_argo <- function(env, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF'){
                                control = list(maxit = 1000, trace = 0)
                                )
     
-    kernelParams[[gene]] <- c(bandwidth = exp(optimResult$par[1]), 
+    kernel_params[[gene]] <- c(bandwidth = exp(optimResult$par[1]), 
                               sigma_f = exp(optimResult$par[2]), 
                               sigma_n = exp(optimResult$par[3:(3 + n_noise - 1)]))
     
     
   }
   
-  kernel_params <- do.call('rbind', kernelParams)
+  kernel_params <- do.call('rbind', kernel_params)
   colnames(kernel_params) <- c('bandwidth', 'sigma_f', paste('sigma_n', 1:n_noise, sep = ''))
   #===================================================================
   ## run differential testing with funGP
   #===================================================================
+  message('now running contrast tests')
   funGP_fits <- list()
   for(gene in genes){
     funGP_fits[[gene]]  <- simple_contrast_test_with_funGP(gene = gene, 

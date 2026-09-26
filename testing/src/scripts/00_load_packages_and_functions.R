@@ -30,6 +30,7 @@ source('testing/src/scripts/generate_perturbed_data.R')
 
 ## differential testing
 source('testing/src/scripts/run_differential_testing.R')
+source('testing/src/R/utils.R')
 
 ## for baseline methods
 source('testing/src/R/get_cct_neglogp.R')
