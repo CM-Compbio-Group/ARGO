@@ -44,6 +44,20 @@ prepare_metadata <- function(df, N){
 }
 
 
+## compute overlap metrics between recovered intervals and the ground truth
+compute_overlap_statistics <- function(intA, intB){
+  jaccard <- length(intersect(intA,intB)) / length(union(intA, intB))
+  overlap.coeff <- length(intersect(intA,intB)) / min(length(intA), length(intB))
+  dice.coeff <- 2 * length(intersect(intA,intB)) / (length(intA) + length(intB))
+  precision <- length(intersect(intA,intB)) / length(intA)
+  recall <- length(intersect(intA,intB)) / length(intB)
+  return(list(jaccard_index = jaccard,
+              overlap_coefficient = overlap.coeff,
+              dice_coefficient = dice.coeff,
+              precision = precision,
+              recall = recall))
+}
+
 
 compute_ranked_auprc <- function(ranked_list, signature){
   binary_labels <- ranked_list %in% signature

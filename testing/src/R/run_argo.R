@@ -1,4 +1,4 @@
-run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF'){
+run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, TEST_INTERVALS = FALSE){
   #' run differential testing with argo, first by fitting GP parameters for each gene and then 
   #' running differential testing. 
   #' 
@@ -19,10 +19,10 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF
   genes <- rownames(env$sim_counts)
   
   ## control variables
+  KERNEL = 'RBF'
   LAMBDA <- 1 # regularization for noise terms in GP fits
-  KLT_CONF_BAND <- TRUE
   CONTRAST_VECTOR <- c(-1, 1)
-  RETURN_CONF_BANDS = FALSE
+  RETURN_CONF_BANDS = TEST_INTERVALS # compute conf bands only if I am interested in recovering intervals
   conf_level_alpha = 0.95
   n_monte_carlo_simulations = 1000 # no.of monte carlo samples
   
@@ -35,12 +35,10 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF
   
   ## define cov kernel exponents
   ## pairwise distances and dist-squared
-  r_x <- as.matrix(dist(x_observed)); dsqx <-  r_x^2
+  r_x <- as.matrix(dist(x_observed)); dsqx <- r_x^2
   r_t <- r_x; dsqt <- dsqx
   r_tx <- r_x; dsqtx <- dsqx
-  # r_t <- as.matrix(dist(x_test)); dsqt <-  r_t^2
-  # r_tx <- rdist::cdist(x_test, x_observed) ; dsqtx <- r_tx^2
-  
+   
   #===================================================================
   ## prepare co-regionalization and noise matrices for GP fitting
   #===================================================================
@@ -89,7 +87,8 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF
                                method = 'L-BFGS-B', 
                                lower = c(min_log_bw, rep(-3, 1 + n_noise)),
                                upper = c(max_log_bw,  rep(3, 1 + n_noise)),
-                               control = list(maxit = 1000, trace = 0)
+                               control = list(maxit = 1000, 
+                                              trace = 0)
                                )
     
     kernel_params[[gene]] <- c(bandwidth = exp(optimResult$par[1]), 
@@ -101,6 +100,7 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF
   
   kernel_params <- do.call('rbind', kernel_params)
   colnames(kernel_params) <- c('bandwidth', 'sigma_f', paste('sigma_n', 1:n_noise, sep = ''))
+  
   #===================================================================
   ## run differential testing with funGP
   #===================================================================
@@ -117,7 +117,7 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF
   #===================================================================
   ## aggregate results from functional testing
   funGP.df <- funGP_fits %>%
-    map_dfr(`[`, c('neglogp', 'deviation', 'index'), .id = 'gene') %>%
+    map_dfr(`[`, c('neglogp', 'deviation', 'index', 'coord_max'), .id = 'gene') %>%
     mutate(across(c(neglogp, deviation, index), as.numeric)) %>% 
     mutate(stats = neglogp * sign(deviation), 
            fdr = p.adjust(exp(-neglogp), method = 'BH')
@@ -125,7 +125,19 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, KERNEL = 'RBF
     arrange(desc(neglogp)) %>%
     mutate(Rank = row_number())
   
-  return(funGP.df)
   
+  if(!(TEST_INTERVALS)){
+    return(funGP.df)
+  }else{
+    # compute binary statistics for where significant deviation occurs
+    interval_binary <- compute_stat_binary(funGP_fits, M)
+    return(list(
+                funGP.df, 
+                interval_binary,
+                funGP_fits))
+    
+  }
 }
+
+# print(funGP.df %>% filter(fdr < 0.05) %>% with(table(gene %in% env$null_genes)))
 

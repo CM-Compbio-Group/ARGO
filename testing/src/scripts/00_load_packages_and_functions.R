@@ -23,10 +23,13 @@ library(readxl)
 library(PRROC)
 library(extrafont)
 
+## for parallel processing
+library(futurize)
 
 ## for fitting scDesign and simulating data
 source('testing/src/scripts/fit_scDesign3.R')
 source('testing/src/scripts/generate_perturbed_data.R')
+source('testing/src/R/generate_interval_perturbation.R')
 
 ## differential testing
 source('testing/src/scripts/run_differential_testing.R')
@@ -43,5 +46,8 @@ source('testing/src/R/simple_contrast_test_with_funGP.R')
 source('testing/src/R/generate_cc_matrix.R')
 source('testing/src/R/compute_analytical_pvalue.R')
 source('testing/src/R/derive_KLT_CI_bands.R')
+source('testing/src/R/compute_exceedence_statistics.R')
+
+
 
 

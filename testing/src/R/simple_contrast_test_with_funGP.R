@@ -74,7 +74,8 @@ simple_contrast_test_with_funGP <- function(gene, par, env){
   fgp_res <- list('statistic' = fungp_test_statistic,
                   'neglogp' =  compute_analytical_pvalue(sigma_statistic, fungp_test_statistic),
                   'deviation' = fungp_test_statistic[idx],
-                  'index' = idx)
+                  'index' = idx,
+                  'coord_max' = env$x_test[idx])
   
   if(env$RETURN_CONF_BANDS){
     klt <- KLT_CI_bands(sigma_statistic, 

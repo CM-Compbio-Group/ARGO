@@ -3,28 +3,24 @@
 #' We start by using scDesign to fit parameters for each gene in the dataset
 #' We then perturb the mean parameters along the trajectory to create different kinds of effects, 
 #' and check the capacity of algorithms to recover these deviances
+#' 
+#' Adding benchmarks for the deviation interval recognition property of ARGO -- simulating genes with different 
+#' perturbation amplitudes and bandwidths, and comparing recovered bands with ground truth regions with non-zero FC
 
 
 rm(list=ls())
 source('testing/src/scripts/00_load_packages_and_functions.R')
-library(futurize)
 dataset <- 'PANCREAS'
 
 
 FIT_DATA <- FALSE
 GENERATE_DATA <- FALSE
-RUN_TESTING <- TRUE
-PLOT_RESULTS <- TRUE
+RUN_TESTING <- FALSE
+PLOT_RESULTS <- FALSE
 
-## make a map of parameter values and experiments
-perturb_amplitude <- c(0.3, 0.6, 1) # magnitude of LFC in perturbation
-perturb_bandwidth <- c(0.03, 0.06, 0.1) # width of the perturbation
-N_EXPERIMENTS <- 5 # no. of replicates for each parameter combination
-expt_df <- crossing(amplitude = perturb_amplitude,
-                    bandwidth = perturb_bandwidth,
-                    iter = factor(paste('iter', seq(N_EXPERIMENTS), sep = '-'))) %>% 
-  mutate(Experiment = row_number())
-N_SAMPLES = 3 # number of randomly sampled replicates for each condition 
+GENERATE_INTERVAL_BENCHMARK <- FALSE
+RUN_INTERVAL_BENCHMARK <- TRUE
+
 
 
 
@@ -39,20 +35,37 @@ if(FIT_DATA){
 
 
 if(GENERATE_DATA){
+  ## make a map of parameter values and experiments
+  perturb_amplitude <- c(0.3, 0.6, 1) # magnitude of LFC in perturbation
+  perturb_bandwidth <- c(0.03, 0.06, 0.1) # width of the perturbation
+  N_EXPERIMENTS <- 5 # no. of replicates for each parameter combination
+  expt_df <- crossing(amplitude = perturb_amplitude,
+                      bandwidth = perturb_bandwidth,
+                      iter = factor(paste('iter', seq(N_EXPERIMENTS), sep = '-'))) %>% 
+    mutate(Experiment = row_number())
+  N_SAMPLES = 3 # number of randomly sampled replicates for each condition 
+  
   ## define control variables for perturbation experiment
   G = 500 # number of genes to use
   perturb_frac = 0.2 # fraction of genes that must have perturbations
    # n_cores = 20 # number of cores used for simulating counts with scDesign3
   sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
-  # boxplot(sce_fits$sce$pseudotime~ sce_fits$sce$cell_type, xlab = 'cell type', ylab = 'pseudotime')
-  env <- environment()
-  # generate_perturbed_data(expt = 1, env) # test call
+  
   ## generate the datasets in parallel 
   message('generating perturbation datasets')
   base::lapply(seq_len(nrow(expt_df)), generate_perturbed_data, expt_df, sce_fits,
          G, perturb_frac, N_SAMPLES, dataset) |> futurize()
 }
 
+
+if(GENERATE_INTERVAL_BENCHMARK){
+  sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
+  generate_interval_perturbation(sce_fits, dataset)
+}
+
+if(RUN_INTERVAL_BENCHMARK){
+  run_interval_evaluation(N = 50)  
+}
 
 ## test on one experiment
 # metrics <- run_differential_testing(expt = 20, dataset)
@@ -61,7 +74,6 @@ if(GENERATE_DATA){
 ## run differential testing and gather evaluation metrics on each dataset
 if(RUN_TESTING){
   message('now running differential testing')
-  # metrics <- run_differential_testing(expt = 27, dataset = dataset, N = 25) ## test run
   plan(multisession, workers = 8)
   start_time <- Sys.time()
   eval.metrics <- base::lapply(seq_len(nrow(expt_df)), 
@@ -97,7 +109,8 @@ if(PLOT_RESULTS){
     message(metrx)
     p <- ggplot(eval_long %>% filter(metric == metrx), aes(x = method, y = value, color = method)) +
       # Scales the 10 iterations tightly within each of the 7 method columns
-      geom_jitter(width = 0.15, alpha = 0.7, size = 1.8) + ylim(c(0, 1)) + 
+      geom_jitter(width = 0.15, alpha = 0.7, size = 1.8) + 
+      # ylim(c(0, 1)) + 
       # Adds a clear center-point for the mean
       stat_summary(fun = mean, geom = "point", color = "black", size=3, pch=18) +
       # Splitting into metric subpanels
