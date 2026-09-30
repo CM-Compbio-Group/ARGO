@@ -13,15 +13,23 @@ source('testing/src/scripts/00_load_packages_and_functions.R')
 dataset <- 'PANCREAS'
 
 
-FIT_DATA <- FALSE
-GENERATE_DATA <- FALSE
-RUN_TESTING <- FALSE
-PLOT_RESULTS <- FALSE
+FIT_DATA <- TRUE
+GENERATE_DATA <- TRUE
+RUN_TESTING <- TRUE
+PLOT_RESULTS <- TRUE
 
-GENERATE_INTERVAL_BENCHMARK <- FALSE
+GENERATE_INTERVAL_BENCHMARK <- TRUE
 RUN_INTERVAL_BENCHMARK <- TRUE
 
 
+## make a map of parameter values and experiments
+N_EXPERIMENTS <- 5 # no. of replicates for each parameter combination
+perturb_amplitude <- c(0.3, 0.6, 1) # magnitude of LFC in perturbation
+perturb_bandwidth <- c(0.03, 0.06, 0.1) # width of the perturbation
+expt_df <- crossing(amplitude = perturb_amplitude,
+                    bandwidth = perturb_bandwidth,
+                    iter = factor(paste('iter', seq(N_EXPERIMENTS), sep = '-'))) %>% 
+  mutate(Experiment = row_number())
 
 
 if(FIT_DATA){
@@ -33,43 +41,22 @@ if(FIT_DATA){
 
 
 
-
 if(GENERATE_DATA){
-  ## make a map of parameter values and experiments
-  perturb_amplitude <- c(0.3, 0.6, 1) # magnitude of LFC in perturbation
-  perturb_bandwidth <- c(0.03, 0.06, 0.1) # width of the perturbation
-  N_EXPERIMENTS <- 5 # no. of replicates for each parameter combination
-  expt_df <- crossing(amplitude = perturb_amplitude,
-                      bandwidth = perturb_bandwidth,
-                      iter = factor(paste('iter', seq(N_EXPERIMENTS), sep = '-'))) %>% 
-    mutate(Experiment = row_number())
-  N_SAMPLES = 3 # number of randomly sampled replicates for each condition 
-  
   ## define control variables for perturbation experiment
-  G = 500 # number of genes to use
+  N_SAMPLES = 3 # number of randomly sampled replicates for each condition 
+  N_GENES = 500 # number of genes to use
   perturb_frac = 0.2 # fraction of genes that must have perturbations
-   # n_cores = 20 # number of cores used for simulating counts with scDesign3
   sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
   
   ## generate the datasets in parallel 
+  # generate_perturbed_data(expt=29, expt_df, sce_fits,
+  #           N_GENES = 2000, perturb_frac = 0.2, N_SAMPLES = 1, dataset) # test run 
   message('generating perturbation datasets')
   base::lapply(seq_len(nrow(expt_df)), generate_perturbed_data, expt_df, sce_fits,
-         G, perturb_frac, N_SAMPLES, dataset) |> futurize()
+         N_GENES, perturb_frac, N_SAMPLES, dataset) |> futurize(seed = TRUE)
 }
 
 
-if(GENERATE_INTERVAL_BENCHMARK){
-  sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
-  generate_interval_perturbation(sce_fits, dataset)
-}
-
-if(RUN_INTERVAL_BENCHMARK){
-  run_interval_evaluation(N = 50)  
-}
-
-## test on one experiment
-# metrics <- run_differential_testing(expt = 20, dataset)
-# summary(metrics)
 
 ## run differential testing and gather evaluation metrics on each dataset
 if(RUN_TESTING){
@@ -77,11 +64,22 @@ if(RUN_TESTING){
   plan(multisession, workers = 8)
   start_time <- Sys.time()
   eval.metrics <- base::lapply(seq_len(nrow(expt_df)), 
-                               run_differential_testing, dataset, N = 50) |> futurize(seed = TRUE)
+                               run_differential_testing, N = 50, dataset) |> futurize(seed = TRUE)
   end_time <- Sys.time()
   print(end_time - start_time)
-  write_rds(eval.metrics, glue('testing/output/diff_testing_results_nreplicates_{N_SAMPLES}.rds'))
+  write_rds(eval.metrics, glue('testing/output/diff_testing_eval_metrics.rds'))
   plan(sequential)
+}
+
+
+if(GENERATE_INTERVAL_BENCHMARK){
+  set.seed(148)
+  sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
+  generate_interval_perturbation(sce_fits = sce_fits, N_GENES = 3e3, N_SAMPLES = 1, dataset)
+}
+
+if(RUN_INTERVAL_BENCHMARK){
+  run_interval_evaluation(dataset, N = 50)  
 }
 
 
@@ -100,10 +98,6 @@ if(PLOT_RESULTS){
   
   eval_long <- merge(eval_long, expt_df, by = 'Experiment') %>% as_tibble()
   eval_long
-  
-  # dplyr::filter(eval_long, method == 'argo_conditional_noise' & amplitude == 0.3 & bandwidth == 0.03 & metric == 'F1')
-  # View(filter(eval_long, Experiment == 10))
-  
   
   for(metrx in c('AUPRC', 'F1')){
     message(metrx)
@@ -135,7 +129,7 @@ if(PLOT_RESULTS){
       ) + scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 10))
     
     
-    ggsave(plot = p, filename = glue('testing/figs/{metrx}_comparative_nreplicates_{N_SAMPLES}.pdf'), 
+    ggsave(plot = p, filename = glue('testing/figs/{metrx}_evaluation.pdf'), 
            device = 'pdf', width = 15, height = 15)
     
   }

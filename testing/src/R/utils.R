@@ -46,6 +46,9 @@ prepare_metadata <- function(df, N){
 
 ## compute overlap metrics between recovered intervals and the ground truth
 compute_overlap_statistics <- function(intA, intB){
+  if(is_empty(intA) && is_empty(intB)){
+    stop('intervals to evaluate cannot be empty')
+  }
   jaccard <- length(intersect(intA,intB)) / length(union(intA, intB))
   overlap.coeff <- length(intersect(intA,intB)) / min(length(intA), length(intB))
   dice.coeff <- 2 * length(intersect(intA,intB)) / (length(intA) + length(intB))
@@ -73,6 +76,18 @@ compute_ranked_auprc <- function(ranked_list, signature){
 
 
 compute_eval_metrics <- function(df, effect_genes, null_genes, fdr_thresh = 0.05){
+  if(!(is.data.frame(df))){
+    stop('Type Error : df must be a data frame')
+  }
+  if(!(is.numeric(fdr_thresh))){
+    stop('Type Error : fdr_thresh must be numeric')
+  }
+  if(fdr_thresh < 0 || fdr_thresh > 1){
+    stop('Value Error : fdr_thresh must be between zero and one')
+  }
+  if(is_empty(effect_genes) || is_empty(null_genes)){
+    stop('list of positive and negative genes cannot be zero')
+  }
   called <- filter(df, fdr < fdr_thresh) %>% pull(gene)
   not_called <- filter(df, fdr >= fdr_thresh) %>% pull(gene)
   TP = length(intersect(called, effect_genes))

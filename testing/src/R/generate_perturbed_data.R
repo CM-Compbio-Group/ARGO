@@ -1,19 +1,77 @@
-generate_perturbed_data <- function(expt, expt_df, sce_fits, G, perturb_frac, N_SAMPLES, dataset){
+generate_perturbed_data <- function(expt = 1, expt_df = tibble(), sce_fits = list(), 
+                                    N_GENES = 1e3, perturb_frac = 0.2, N_SAMPLES = 1, 
+                                    dataset = 'PANCREAS'){
   
   #' get learned parameter fits for the dataset from scDesign. Use baseline fitted mean parameters to introduce 
   #' localized perturbations along pseudotime across conditions. Use new parameters to simulate ground truth counts 
-  #' data for differential testing. Save generated counts and metadata to file, return ground-truth parameter for perturbations to main
+  #' data for differential testing. 
+  #' Save generated counts and metadata to file, return ground-truth perturbation parameters to main
   #' 
   #' @param expt experiment number for saving data
   #' @param expt_df perturbation plan
   #' @param sce_fits fitted scDesign3 parameters for the dataset
-  #' @param G number of genes to include from data
+  #' @param N_GENES number of genes to include from data
   #' @param perturb_frac what fraction of the genes must have effects
   #' @param N_SAMPLES number of replicates to include for each condition
   #' @param dataset name of the dataset being studied
   #' 
   #' saves simulated data to rds file 
   #' script is hard coded for simulating only 2 conditions
+  
+  
+  if(!(is.double(expt)) ||  !(expt %% 1 == 0)){
+    stop('Type Error : expt must be integer')
+  }
+  
+  if(expt < 1){
+    stop('Value Error : expt should be positive')
+  }
+  
+  if(expt > nrow(expt_df)){
+    stop('Value Error : expt should identify a row of expt_df')
+  }
+  
+  stopifnot(
+    "expt_df is missing or not a data frame" = is.data.frame(expt_df), 
+    "expt_df does not have the required information" = all(c('amplitude', 'bandwidth') %in% (colnames(expt_df)))
+  )
+  
+  stopifnot("input does not have the right objects" = identical(names(sce_fits), c('sce', 'data', 'copula', 'para')))
+  
+  if(!(is.double(N_GENES)) ||  !(N_GENES %% 1 == 0)){
+    stop('Type Error : N_GENES must be integer')
+  }
+  if(N_GENES < 1){
+    stop('Value Error : data must include at least one gene')
+  }
+  if(N_GENES > 2e4){
+    stop('Value Error : N_GENES seems inflated. Check input.')
+  }
+  if(N_GENES < 10){
+    warning('Consider increasing N_GENES to evaluate perturbation effects')
+  }
+  
+  
+  if(!(is.numeric(perturb_frac))){
+    stop('Type Error : N_GENES must be numeric')
+  }
+  if(perturb_frac < 0 || perturb_frac > 1){
+    stop('Value Error : perturb_frac must be between 0 and 1')
+  }
+  
+  if(!(is.double(N_SAMPLES)) ||  !(N_SAMPLES %% 1 == 0)){
+    stop('Type Error : N_SAMPLES must be integer')
+  }
+  if(N_SAMPLES < 1){
+    stop('Value Error : N_SAMPLES must be positive')
+  }
+  if(N_SAMPLES > 100){
+    stop('Value Error : N_SAMPLES seems inflated. Check input.')
+  }
+  
+  # have to include bootstrapping for desired number of genes
+  # include reasonable defaults
+  # check columns of expt_df
   
   message(glue('simulating counts for experiment {expt}'))
   set.seed(148 + expt)
@@ -25,25 +83,37 @@ generate_perturbed_data <- function(expt, expt_df, sce_fits, G, perturb_frac, N_
   zeallot::`%<-%`(c(sce, sce.dat, sce.copula, sce.para), sce_fits) #unlist learned variables for dataset
   
   ## sample genes to include in experiment
-  genes <- sample(colnames(sce.dat$count_mat), size = G, replace = F); 
+  genes <- sample(colnames(sce.dat$count_mat), size = N_GENES, replace = T); 
+  unique_genes <- make.unique(genes) # make gene names unique when we have repeated samples
   t_ <- sce.dat$newCovariate$pseudotime
   N_TOTAL <- 2*N_SAMPLES # total number of samples simulated
   
-  ## extract the mean parameters for these genes
+  ## get fitted parameters for the sampled genes
   mu_A <- sce.para$mean_mat[, genes]
-  sce.copula$copula_list$`1` <- sce.copula$copula_list$`1`[genes, genes]
+  sigma <- sce.para$sigma_mat[, genes]
+  zero <- sce.para$zero_mat[, genes]
+  colnames(mu_A) <- colnames(sigma) <- colnames(zero) <- unique_genes
+  
+  copula <- sce.copula$copula_list$`1`
+  copula <- copula[genes, genes] # get gene-gene correlations for bootstrapped genes
+  dimnames(copula) <- list(unique_genes, unique_genes)
+  copula_list <- list(`1` = copula)
+  
+  ## update single-cell experiment object
+  sce <- sce[genes, ]
+  rownames(sce) <- unique_genes
   #====================================
   ## identify null and effect genes
   #====================================
-  ord <- sample(G, replace = F)
-  n_effect <- round(perturb_frac * G)
-  effect_genes <- genes[ord[1:n_effect]]
-  null_genes <- genes[ord[(n_effect + 1):G]]
+  ord <- sample(N_GENES, replace = F)
+  n_effect <- round(perturb_frac * N_GENES)
+  effect_genes <- unique_genes[ord[1:n_effect]]
+  null_genes <- unique_genes[ord[(n_effect + 1):N_GENES]]
   
   lfc_mat <- matrix(
     0,
     nrow = nrow(mu_A),
-    ncol = G,
+    ncol = N_GENES,
     dimnames = dimnames(mu_A)
   )
   
@@ -77,12 +147,12 @@ generate_perturbed_data <- function(expt, expt_df, sce_fits, G, perturb_frac, N_
   ## simulate counts data
   #===================================================================
   generate_counts <- function(mu){
-    simu_new(sce = sce[genes, ],
+    simu_new(sce = sce,
              mean_mat = mu,
-             sigma_mat = sce.para$sigma_mat[, genes],
-             zero_mat = sce.para$zero_mat[, genes],
+             sigma_mat = sigma,
+             zero_mat = zero,
              quantile_mat = NULL,
-             copula_list = sce.copula$copula_list,
+             copula_list = copula_list,
              n_cores = 1,
              family_use = "nb",
              input_data = sce.dat$dat, # this is feature vector

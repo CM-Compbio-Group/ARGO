@@ -1,4 +1,4 @@
-run_differential_testing <- function(expt, dataset, N = 25){
+run_differential_testing <- function(expt = 1, N = 25, dataset = 'PANCREAS'){
   #' load simulated counts for the iteration and run differential testing across all algorithms
   #' simulated counts are first converted into pseudo-bulk counts with desired number of bins along the isodepth
   #' raw / normalized pseudo-bulk counts are used as input for the different testing algorithms
@@ -17,6 +17,31 @@ run_differential_testing <- function(expt, dataset, N = 25){
   #' 
   #' @returns list of evaluation metrics across differential testing methods on this simulation run
   #' 
+  
+  ## validate inputs
+  if(!(is.double(expt)) ||  !(expt %% 1 == 0)){
+    stop('Type Error : expt must be integer')
+  }
+  
+  if(expt < 1){
+    stop('Value Error : expt should be positive')
+  }
+  
+  
+  if(!(is.double(N)) ||  !(N %% 1 == 0)){
+    stop('Type Error : N must be integer')
+  }
+  if(N < 1 || N > 1000){
+    stop('Value Error : Value of N is not suitable for pseudo-bulking')
+  }
+  if(N < 10){
+    warning('Temporal resolution might not be sufficient for recovering perturbations. Consider increasing N')
+  }
+  if(N > 100){
+    warning('Bins might be too sparse. Consider lowering N')
+  }
+  
+  stopifnot("input file not found" = file.exists(glue('testing/data/temp/{dataset}_expt_{expt}.rds')))
   
   message(glue('Running testing for Experiment {expt}'))
   # read simulated data for this experiment iteration and unload the list into variables
@@ -73,7 +98,3 @@ run_differential_testing <- function(expt, dataset, N = 25){
   return(eval_metrics)
   
 }
-
-## need to load list of differrential testing results, as well as data to read null
-## genes and effect genes, and gather eval metrics
-

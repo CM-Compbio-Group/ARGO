@@ -1,20 +1,49 @@
-generate_interval_perturbation <- function(sce_fits, dataset){
-  
-  #' perturbing all genes with different combinations of amplitude and bandwidth parameters
+generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_SAMPLES = 1, dataset = 'PANCREAS'){
+  #' perturbing ground truth dataset different combinations of amplitude and bandwidth parameters across genes
+  #' bootstraps genes from the dataset and assigns perturbation parameters for each
   #' 
   #' @param sce_fits fitted scDesign3 parameters for the dataset
+  #' @param N_GENES number of genes to bootstrap from data
+  #' @param N_SAMPLES number of samples to simulate per conditin
   #' @param dataset name of the dataset being studied
   #' 
   #' saves simulated data to rds file 
   #' script is hard coded for simulating only 2 conditions
   
-  set.seed(148)
+  
+  if(!(is.double(N_GENES)) ||  !(N_GENES %% 1 == 0)){
+    stop('Type Error : N_GENES must be integer')
+  }
+  if(N_GENES < 1){
+    stop('Value Error : data must include at least one gene')
+  }
+  if(N_GENES > 1e4){
+    stop('Value Error : N_GENES seems inflated. Check input.')
+  }
+  if(N_GENES < 50){
+    warning('Consider increasing N_GENES to evaluate perturbation effects')
+  }
+  
+  if(!(is.double(N_SAMPLES)) ||  !(N_SAMPLES %% 1 == 0)){
+    stop('Type Error : N_SAMPLES must be integer')
+  }
+  if(N_SAMPLES < 1){
+    stop('Value Error : N_SAMPLES must be positive')
+  }
+  if(N_SAMPLES > 100){
+    stop('Value Error : N_SAMPLES seems inflated. Check input.')
+  }
+  
+  
+  ## make sure sce_fits has the right objects in the right order before extracting
+  stopifnot("input does not have the right objects" = identical(names(sce_fits), c('sce', 'data', 'copula', 'para')))
+  
   zeallot::`%<-%`(c(sce, sce.dat, sce.copula, sce.para), sce_fits) #unlist learned variables for dataset
   
   N_SAMPLES <- 1
   N_TOTAL <- 2*N_SAMPLES
   ## sample genes to include in experiment
-  effect_genes <- sample(rownames(sce), size = 3000, replace = T)
+  effect_genes <- sample(rownames(sce), size = N_GENES, replace = T)
   unique_effect_genes <- make.unique(effect_genes)
   
   t_ <- sce.dat$newCovariate$pseudotime
@@ -22,10 +51,10 @@ generate_interval_perturbation <- function(sce_fits, dataset){
   
   ## extract the mean parameters for these genes
   mu_A <- sce.para$mean_mat[, effect_genes]
-  sigma_A <- sce.para$sigma_mat[, effect_genes]
-  zero_A <- sce.para$zero_mat[, effect_genes]
+  sigma <- sce.para$sigma_mat[, effect_genes]
+  zero <- sce.para$zero_mat[, effect_genes]
   
-  colnames(mu_A) <- colnames(sigma_A) <- colnames(zero_A) <- unique_effect_genes
+  colnames(mu_A) <- colnames(sigma) <- colnames(zero) <- unique_effect_genes
   ## update the correlation matrix b/w genes
   # sce.copula$copula_list$`1` <- sce.copula$copula_list$`1`[effect_genes, effect_genes]
   copula <- sce.copula$copula_list$`1`
@@ -87,8 +116,8 @@ generate_interval_perturbation <- function(sce_fits, dataset){
   generate_counts <- function(mu){
     simu_new(sce = sce,
              mean_mat = mu,
-             sigma_mat = sigma_A,
-             zero_mat = zero_A,
+             sigma_mat = sigma,
+             zero_mat = zero,
              quantile_mat = NULL,
              copula_list = copula_list,
              n_cores = 20,

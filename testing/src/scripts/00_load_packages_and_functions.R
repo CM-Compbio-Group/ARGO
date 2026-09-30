@@ -27,12 +27,13 @@ library(extrafont)
 library(futurize)
 
 ## for fitting scDesign and simulating data
-source('testing/src/scripts/fit_scDesign3.R')
-source('testing/src/scripts/generate_perturbed_data.R')
+source('testing/src/R/fit_scDesign3.R')
+source('testing/src/R/generate_perturbed_data.R')
 source('testing/src/R/generate_interval_perturbation.R')
 
 ## differential testing
-source('testing/src/scripts/run_differential_testing.R')
+source('testing/src/R/run_differential_testing.R')
+source('testing/src/R/run_interval_evaluation.R')
 source('testing/src/R/utils.R')
 
 ## for baseline methods

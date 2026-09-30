@@ -1,4 +1,12 @@
 cct_p.vals <- function(pval, w = NULL){
+  #' given a list of p-values for differential expression analysis of gene across domains / clusters
+  #'combine them with the cauchy combination approach to generate an aggregate p-value for the gene
+  #' @param pval  vector of p-values 
+  #' @param w weights for individual test p values
+  #' @returns neglog cauchy-combination p value
+  #' @references https://pmc.ncbi.nlm.nih.gov/articles/PMC7531765/
+  
+  
   if(is.null(w)) 
     w <- rep(1/length(pval), length(pval))
   w <- w / sum(w)

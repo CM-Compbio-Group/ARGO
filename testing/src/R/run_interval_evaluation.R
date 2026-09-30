@@ -1,11 +1,43 @@
-## evaluate argo
-
-# run_interval_evaluation <- function(N = 50){
-  message(glue('Running interval testing for Argo'))
+run_interval_evaluation <- function(N = 50, FIT_CONDITIONAL_NOISE = FALSE, SAVE_FITS = TRUE, dataset = 'PANCREAS'){
+  #' compare intervals of significant deviation evaluated by ARGO and compare with ground truth
+  #' genes are perturbed with different strength (amplitude) and extent (bandwidth) of FC between conditions
+  #' We use a range of metrics to evaluate how well the recovered intervals from ARGO recover domains of significant deviation
+  #' @param N number of bins to split temporal trajectory into
+  #' @param FIT_CONDITIONAL_NOISE whether to fit ARGO with condition-specific noise
+  #' @param SAVE_FITS whether we want to save the ARGO differential testing results 
+  #' @param dataset ground truth experiment perturbation data is coming from
+  #' 
+  #' @returns () : directly stores the ARGO fits and visualization of metrics in corresponding destinations
+  #' 
+  #' @error-checks check if input file exists, value and type errors for input parameters
+  
+  ## validate inputs
+  if(!(is.double(N)) ||  !(N %% 1 == 0)){
+    stop('Type Error : N must be integer')
+  }
+  if(!is.logical(FIT_CONDITIONAL_NOISE)){
+    stop('Type Error : FIT_CONDITIONAL_NOISE must be boolean')
+  }
+  if(!is.logical(SAVE_FITS)){
+    stop('Type Error : SAVE_FITS must be boolean')
+  }
+  if(N < 1 || N > 1000){
+    stop('Value Error : Value of N is not suitable for pseudo-bulking')
+  }
+  if(N < 10){
+    warning('Temporal resolution might not be sufficient for recovering perturbations. Consider increasing N')
+  }
+  if(N > 100){
+    warning('Bins might be too sparse. Consider lowering N')
+  }
+  
+  stopifnot("input file not found" = file.exists(glue('testing/data/temp/{dataset}_interval_perturbation.rds')))
+  
+  message(glue('Running interval recovery evaluation for Argo'))
+  
   # read simulated data for this experiment iteration and unload the list into variables
   zeallot::`%<-%`(c(sim_counts, sim_meta, genes, effect_info), read_rds(glue('testing/data/temp/{dataset}_interval_perturbation.rds')))
-  effect_info$gene <- make.unique(effect_info$gene)
-  
+    
   # get metadata for different scales of data representation
   zeallot::`%<-%`(c(cell_level_meta, bin_level_meta, sample_level_meta, .), prepare_metadata(sim_meta, N))
   
@@ -30,15 +62,15 @@
   
   zeallot::`%<-%`(c(res.argo, interval.stats, fits), 
                   run_argo(env, bin_meta = argo.input, 
-                           FIT_CONDITIONAL_NOISE = TRUE, 
+                           FIT_CONDITIONAL_NOISE = FIT_CONDITIONAL_NOISE, 
                            TEST_INTERVALS = TRUE))
   
-  write_rds(fits, 'testing/output/argo_conditional_noise_interval_eval_fits.rds')
+  if(SAVE_FITS){
+    write_rds(fits, 'testing/output/argo_eval_fits_conditional_noise_{FIT_CONDITIONAL_NOISE}.rds')
+  }
   
-  pheatmap(interval.stats, cluster_cols = FALSE, show_rownames = FALSE, use_raster = FALSE,
-           name = 'deviationn intervals')
-  
-  
+  # pheatmap(interval.stats, cluster_cols = FALSE, show_rownames = FALSE, use_raster = FALSE,
+  #          name = 'deviationn intervals')
   
   eval.metrics <- vector("list", length = nrow(effect_info))
   for(i in seq_len(nrow(effect_info))){
@@ -67,10 +99,8 @@
         legend.position    = "bottom"
       )
     
-    ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics_conditional_noise.pdf'), width = 8, height = 6)
+    ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics_conditional_noise_{FIT_CONDITIONAL_NOISE}.pdf'), width = 8, height = 6)
   }
   
-  
-  
-# }
+}
 

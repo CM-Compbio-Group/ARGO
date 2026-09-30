@@ -4,14 +4,12 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, TEST_INTERVAL
   #' 
   #' @param env environment of caller to directly access upstream variables
   #' @param FIT_CONDITIONAL_NOISE whether to fit likelihood with condition-specific noise terms or a shared nugget
-  #' @param KERNEL what covariance kernel to use for fitting GPs to data
   #' @returns data frame with differential testing results for the genes
   
   message(glue("Running ARGO with conditional noise set to {FIT_CONDITIONAL_NOISE}"))
   
-  # set parent environment
+  # set parent environment to scope variables
   rlang::env_poke_parent(environment(), new_env = env)
-  
   
   ## read variables into the current environment (that i want to pass to nested functions)
   N <- env$N
@@ -128,16 +126,14 @@ run_argo <- function(env, bin_meta, FIT_CONDITIONAL_NOISE = FALSE, TEST_INTERVAL
   
   if(!(TEST_INTERVALS)){
     return(funGP.df)
-  }else{
+  } else {
     # compute binary statistics for where significant deviation occurs
     interval_binary <- compute_stat_binary(funGP_fits, M)
     return(list(
                 funGP.df, 
                 interval_binary,
                 funGP_fits))
-    
   }
 }
 
-# print(funGP.df %>% filter(fdr < 0.05) %>% with(table(gene %in% env$null_genes)))
 
