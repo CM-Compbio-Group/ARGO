@@ -75,7 +75,7 @@ if(RUN_TESTING){
 if(GENERATE_INTERVAL_BENCHMARK){
   set.seed(148)
   sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
-  generate_interval_perturbation(sce_fits = sce_fits, N_GENES = 3e3, N_SAMPLES = 1, dataset)
+  generate_interval_perturbation(sce_fits = sce_fits, N_GENES = 3e2, N_SAMPLES = 1, dataset)
 }
 
 if(RUN_INTERVAL_BENCHMARK){
