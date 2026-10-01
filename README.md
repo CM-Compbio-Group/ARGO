@@ -18,7 +18,7 @@ We present ARGO, a statistical tool for performing differential testing along co
 
 **outputs** : 
  - p-value for a global hypothesis test for each gene that expression does not vary significantly between conditions anywhere along the trajectory
- - a level-$\alpha$ confidence band along the trajectory, that allows us to infer intervals where significant deviation between conditions is identified. 
+ - a level-&alpha; confidence band along the trajectory, that allows us to infer intervals where significant deviation between conditions is identified. 
 
 
 The model internally uses gaussian processes to fit expression data for each gene, and uses the intrinsic co-regionalization model to derive test statistics for the hypothesis tests. The algorithm can also be used to perform differential abundance analysis along the trajectories, and these applications will be added to the repository in the near future.  
