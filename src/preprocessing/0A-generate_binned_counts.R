@@ -12,7 +12,7 @@
 
 
 # load libraries
-source('src/scripts/00-load-packages.R')
+# source('src/scripts/00-load-packages.R')
 source('src/R/add_reflective_padding.R')
 library(anndata)
 library(DESeq2)
@@ -38,18 +38,18 @@ x_observed <- obs %>% pull(coord_x) %>% unique() %>% sort()
 #--------------------------------
 ## visualize bins
 #--------------------------------
-pheatmap::pheatmap(table(obs$bin, obs$tissue), cluster_rows = F)
+# pheatmap::pheatmap(table(obs$bin, obs$tissue), cluster_rows = F)
 
 # distribution of isodepth values across tissue domains by slide
-ggplot(obs, aes(x = factor(tissue), y = binned_isodepth, fill = tissue)) +
-  geom_boxplot(outlier.shape = NA) +
-  scale_fill_brewer(palette = "Set2") + # Custom color palette
-  theme_classic() +       
-  labs(x = "Tissue domain", y = "Isodepth") + 
-  theme(
-    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
-  ) + 
-  facet_wrap(~ donor_id)
+# ggplot(obs, aes(x = factor(tissue), y = binned_isodepth, fill = tissue)) +
+#   geom_boxplot(outlier.shape = NA) +
+#   scale_fill_brewer(palette = "Set2") + # Custom color palette
+#   theme_classic() +       
+#   labs(x = "Tissue domain", y = "Isodepth") + 
+#   theme(
+#     axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)
+#   ) + 
+#   facet_wrap(~ donor_id)
 
 #----------------------------------------------------------------------
 ## extract counts data and convert to pseudobulk bin-level data

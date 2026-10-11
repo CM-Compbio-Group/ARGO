@@ -5,7 +5,7 @@
 
 
 # read processed bin-level counts data
-bin_meta <- read_rds('data/processed/bin_meta.rds')
+# bin_meta <- read_rds('data/processed/bin_meta.rds')
 #--------------------------------
 #--------------------------------
 # extract variable names
@@ -22,10 +22,11 @@ n_slides <- nrow(slide_df)
 ## load the coordinate points (test data points)
 ## observed data must include the padding
 x_observed <- sort(unique(bin_meta$coord_x)); N <- length(x_observed)
-load('data/temp/test_domain.rdata')
+# load('data/temp/test_domain.rdata')
 #--------------------------------------------------------------------
 ## build the full unobserved regular spatial grid (n_slides x N)
 #--------------------------------------------------------------------
+bin_meta <- mutate(bin_meta, bin = factor(bin))
 ordered_bins <- levels(bin_meta$bin)
 
 full_grid <- expand_grid(

@@ -1,138 +1,142 @@
 ## return posterior predictive plots for the genes given the parameter fits
-## return a list of figs along each axis
-
-
-posterior_predictive_plots <- function(gene, y, par, r_x, r_t, r_tx,
-                                       x_observed, x_test, P_obs,
-                                       dsqx, dsqt, dsqtx, B, N, M,
-                                       slides_per_group, noise_diag, 
-                                       KERNEL = 'RBF', 
-                                       fit_donor = F,
-                                       cov_donor,
-                                       meta, 
-                                       slide_df, 
-                                       FILTER = FALSE # whether to filter to contrast
-                                       ){
-                                       
-  ## function arguements are
-  # par : GP parameters for the gene / gene
-  # obs / test coordinates
-  # SE KERNEL pairwise distance (dsqx, dsqt)
-  # B : coregionalization matrix
-  # noise_diag : slide-specific noise  
-  # KERNEL : RBF / Matern --- what cov KERNEL to fit to data
-  
-  ## extract GP parameters
-  bw = par[1]
-  sigma_f = par[2]
-  sigma_d = ifelse(fit_donor, par[3], 0)
-  sigma_n = par[4:length(par)]
-  n_slides <- sum(slides_per_group)
-  Sigma <- diag(sigma_n[noise_diag] ^ 2)
-  
-  ## compute covariance KERNELs
-  if(KERNEL == 'RBF'){
-    Kxx <- sigma_f^2 * exp(-0.5 * dsqx / (bw^2))
-    Ktt <- sigma_f^2 * exp(-0.5 * dsqt / (bw^2))
-    Ktx <- sigma_f^2 * exp(-0.5* dsqtx / (bw^2))
-  }else if(KERNEL == 'Matern5'){
-    ## compute explicitly for each case. only two computations for each KERNEL
-    Kxx <- sigma_f^2 * (1 + (sqrt(5)*r_x / bw) + 5*dsqx/(3*bw^2)) * exp(-(sqrt(5)*r_x / bw))
-    Ktt <- sigma_f^2 * (1 + (sqrt(5)*r_t / bw) + 5*dsqt/(3*bw^2)) * exp(-(sqrt(5)*r_t / bw))
-    Ktx <- sigma_f^2 * (1 + (sqrt(5)*r_tx / bw) + 5*dsqtx/(3*bw^2)) * exp(-(sqrt(5)*r_tx / bw))
-  } else if(KERNEL == 'Matern3'){
-    Kxx <- sigma_f^2 * (1 + sqrt(3)*r_x / bw) * exp(-sqrt(3)*r_x / bw)
-    Ktt <- sigma_f^2 * (1 + sqrt(3)*r_t / bw) * exp(-sqrt(3)*r_t / bw)
-    Ktx <- sigma_f^2 * (1 + sqrt(3)*r_tx / bw) * exp(-sqrt(3)*r_tx / bw)
-  }else{
-    stop(sprintf("Unsupported KERNEL type: '%s'. Choose 'RBF' or 'Matern5' or 'Matern3.", KERNEL))
-  }
-  
-  
-  ## covariance for observations
-  Kf <- kronecker(B, Kxx) + kronecker(Sigma, diag(N)) 
-  Kf <- P_obs %*% tcrossprod(Kf, P_obs) + sigma_d^2*cov_donor
-  U_f <- chol(Kf)
-  Kf_inv <- chol2inv(U_f)
-  
-  ##--------------------------------------------------
-  ## posterior mean for observations (UW^T | Y)
-  ##--------------------------------------------------
-  ## if we want donor-specific shifted curves for each mouse
-  if(fit_donor){
-    donor_levels <- unique(slide_df$donor_id)
-    test_donors <- rep(slide_df$donor_id, each=M)
-    Z_test <- model.matrix(~0 + factor(test_donors, levels = donor_levels))
-    Z_obs <- model.matrix(~0 + factor(meta$donor_id, levels = donor_levels))
+posterior_predictive_plots <- function(feature, argo_env){
+  argo_env$.feature <- feature
+  with(argo_env, {
+    # browser()
+    feature_vec <- counts[, .feature]
+    params <- kernel_params[.feature, ]
+    bw = params[1]
+    sigma_f = params[2]
+    sigma_d = ifelse(FIT_DONOR, params[3], 0)
+    sigma_n = params[4:length(params)]
     
-    cov_donor_star <- tcrossprod(Z_test, Z_obs)
-    Ktx_obs <- tcrossprod(kronecker(B, Ktx) , P_obs) + sigma_d^2*cov_donor_star
-  }else{
-    Ktx_obs <- tcrossprod(kronecker(B, Ktx) , P_obs)
-  }
-  ##--------------------------------------------------
-  ## posterior predictives
-  y_pred <- Ktx_obs %*% Kf_inv %*% y
-
-  ##--------------------------------------------------
-  ##plot the data
-  ##--------------------------------------------------
-  gp_df <- data.frame(
-    y_gp    = as.vector(y_pred),
-    coord_x = rep(x_test, times = n_slides),
-    slide   = rep(slide_df$batch, each = M),
-    donor = rep(slide_df$donor_id, each=M),
-    age     = rep(slide_df$age, each = M)
-  )
-
-  ## filter to only time points of interest
-  ## subsetting after i have the posterior fits
-  if(FILTER){
-    gp_df <- filter(gp_df, age %in% c('24wk', '90wk'))
-    meta <- filter(meta, age %in% c('24wk', '90wk'))
-  }
-  
-  
-  # 2. Compute the mean trajectory across slides within each age group
-  gp_mean_df <- gp_df %>%
-    group_by(age, coord_x) %>%
-    summarize(y_gp = mean(y_gp), .groups = "drop")
-
-  # 3. Plot the clean mean curve
-  p <- ggplot(data = meta, aes(x = coord_x, y = !!sym(gene), fill = donor_id)) +
-    geom_jitter(
-      width = 0.015,
-      height = 0,
-      shape = 21,
-      color = "transparent",
-      alpha = 0.5,
-      size = 1.5
-    ) +
-    # Single mean GP curve per facet
-    geom_line(
-      data = gp_mean_df,
-      aes(x = coord_x, y = y_gp, group = age),
-      color = 'red', linewidth = 0.75, alpha = .85,
-      inherit.aes=F
-    ) + 
-    ## posterior fits for each donor
-    # geom_line(
-    #   data = gp_df,
-    #   aes(x = coord_x, y = y_gp, colour = donor, group = slide),
-    #   linewidth = 0.75, alpha = .85, linetype = 1,
-    #   inherit.aes = FALSE
-    # ) +
-    facet_wrap(~ age) +
-    ylim(quantile(meta %>% pull(gene), c(0.005, 0.995), na.rm = TRUE)) +
-    labs(x = 'Isodepth', y = gene, fill = "Donor") +
-    theme_classic(base_size = 12) +
-    theme(
-      axis.title.y = element_text(size = 16),
-      panel.grid = element_blank(),
-      strip.text = element_text(size = 16, face = "bold"),
-      axis.text = element_text(color = "black"),
-      legend.title = element_text(size = 16)
+    n_slides <- length(levels(bin_meta$sample_id))
+    Sigma <- diag(sigma_n[noise_diag] ^ 2)
+    
+    ## compute covariance kernel
+    if(KERNEL == 'RBF'){
+      if(N == M){ # if testing on same points
+        Kxx <- Ktt <- Ktx <- sigma_f^2 * exp(-0.5 * dsqx / (bw^2))
+      } else{
+        Kxx <- sigma_f^2 * exp(-0.5 * dsqx / (bw^2))
+        Ktt <- sigma_f^2 * exp(-0.5 * dsqt / (bw^2))
+        Ktx <- sigma_f^2 * exp(-0.5* dsqtx / (bw^2))
+      }
+    }else if(KERNEL == 'Matern3'){
+      if(N == M){
+        Kxx <- Ktt <- Ktx <- sigma_f^2 * (1 + sqrt(3)*r_x / bw) * exp(-sqrt(3)*r_x / bw)
+      }else{
+        Kxx <- sigma_f^2 * (1 + sqrt(3)*r_x / bw) * exp(-sqrt(3)*r_x / bw)
+        Ktt <- sigma_f^2 * (1 + sqrt(3)*r_t / bw) * exp(-sqrt(3)*r_t / bw)
+        Ktx <- sigma_f^2 * (1 + sqrt(3)*r_tx / bw) * exp(-sqrt(3)*r_tx / bw)
+      }
+    }else if(KERNEL == 'Matern5'){
+      if(N == M){
+        Kxx <- Ktt <- Ktx <- sigma_f^2 * (1 + (sqrt(5)*r_x / bw) + 5*dsqx/(3*bw^2)) * exp(-(sqrt(5)*r_x / bw))
+      }else{
+      ## compute explicitly for each case. only two computations for each KERNEL
+      Kxx <- sigma_f^2 * (1 + (sqrt(5)*r_x / bw) + 5*dsqx/(3*bw^2)) * exp(-(sqrt(5)*r_x / bw))
+      Ktt <- sigma_f^2 * (1 + (sqrt(5)*r_t / bw) + 5*dsqt/(3*bw^2)) * exp(-(sqrt(5)*r_t / bw))
+      Ktx <- sigma_f^2 * (1 + (sqrt(5)*r_tx / bw) + 5*dsqtx/(3*bw^2)) * exp(-(sqrt(5)*r_tx / bw))
+      }
+    }
+    
+    Kf <- kronecker(B, Kxx) + kronecker(Sigma, diag(N)) 
+    Kf <- projection %*% tcrossprod(Kf, projection) + sigma_d^2*cov_donor
+    U_f <- chol(Kf)
+    Kf_inv <- chol2inv(U_f)
+    
+    ##--------------------------------------------------
+    ## posterior mean for observations (UW^T | Y)
+    ##--------------------------------------------------
+    ## if we want donor-specific shifted curves for each mouse
+    if(FIT_DONOR){
+      donor_levels <- levels(metadata$donor_id)
+      test_donors <- rep(metadata %>% distinct(sample_id, donor_id) %>% pull(donor_id), each=M)
+      Z_test <- model.matrix(~0 + factor(test_donors, levels = donor_levels))
+      Z_obs <- model.matrix(~0 + metadata$donor_id)
+      cov_donor_star <- tcrossprod(Z_test, Z_obs)
+      Ktx_obs <- tcrossprod(kronecker(B, Ktx) , projection) + sigma_d^2*cov_donor_star
+    }else{
+      Ktx_obs <- tcrossprod(kronecker(B, Ktx) , projection)
+    }
+    ##--------------------------------------------------
+    ## posterior predictives
+    y_pred <- Ktx_obs %*% Kf_inv %*% feature_vec
+    ##--------------------------------------------------
+    ##plot the data
+    ##--------------------------------------------------
+    slide_df <- metadata %>% distinct(sample_id, donor_id, condition)
+    grid_df <- expand.grid(
+      coord_x   = test_coords,
+      sample_id = slide_df$sample_id
     )
-  
-  return(p)
+    grid_df <- merge(grid_df, slide_df, by = "sample_id", sort = FALSE)
+    
+    gp_df <- data.frame(
+      y_gp    = as.vector(y_pred),
+      coord_x = grid_df$coord_x,
+      slide   = grid_df$sample_id,
+      donor = grid_df$donor_id,
+      condition = grid_df$condition
+    )
+    
+    ## filter to only time points of interest
+    ## subsetting after i have the posterior fits
+    # if(FILTER){
+    #   gp_df <- filter(gp_df, condition %in% c('24wk', '90wk'))
+    #   metadata <- filter(metadata, condition %in% c('24wk', '90wk'))
+    # }
+    
+    # 2. Compute the mean trajectory across slides within each condition group
+    gp_mean_df <- gp_df %>%
+      group_by(condition, coord_x) %>%
+      summarize(y_gp = mean(y_gp), .groups = "drop")
+    
+    plot_meta <- bind_cols(metadata, feature = feature_vec)
+    # 3. Plot the clean mean curve
+    p <- ggplot(data = plot_meta, 
+                aes(x = coord_x, y = feature, color = donor_id)) +
+      geom_jitter(
+        width = 0.015,
+        height = 0,
+        shape = 16,
+        alpha = 0.5,
+        size = 1.5
+      ) 
+    
+    ## posterior fits for each donor
+    if(FIT_DONOR){
+      p <- p + geom_line(
+        data = gp_df,
+        aes(x = coord_x, y = y_gp, color = donor, group = slide),
+        linewidth = 0.75, alpha = .85, linetype = 1,
+        inherit.aes = FALSE
+      )
+    }
+    
+    p <- p + # Single mean GP curve per facet
+      geom_line(
+        data = gp_mean_df,
+        aes(x = coord_x, y = y_gp, group = condition),
+        color = 'red', linewidth = 0.75, alpha = .85,
+        inherit.aes=F
+      ) + 
+      facet_wrap(~ condition) +
+      ylim(quantile(feature_vec, c(0.005, 0.995), na.rm = TRUE)) +
+      labs(x = 'Isodepth', y = .feature, color = "Donor") +
+      scale_x_continuous(breaks = c(0, 0.5, 1.0), 
+                         labels = c("0.0", "0.5", "1.0")) + 
+      theme_classic(base_size = 12) +
+      theme(
+        axis.title.y = element_text(size = 16),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 16, face = "bold"),
+        axis.text = element_text(color = "black"),
+        legend.title = element_text(size = 16)
+      )
+
+    return(p)
+  })
+                                       
 }

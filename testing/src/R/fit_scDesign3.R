@@ -34,7 +34,7 @@ fit_scDesign3 <- function(sce){
     marginal_list = sce.marginal,
     family_use = "nb",
     copula = "gaussian",
-    n_cores = 20,
+    n_cores = 8,
     input_data = sce.data$dat,
   )
   
@@ -42,7 +42,7 @@ fit_scDesign3 <- function(sce){
   sce.para <- extract_para(
     sce = sce,
     marginal_list = sce.marginal,
-    n_cores = 20,
+    n_cores = 8,
     family_use = "nb",
     new_covariate = NULL,
     data = sce.data$dat

@@ -6,8 +6,6 @@
 #===================================================================
 ## genes of interest that I can visualize
 #===================================================================
-library(Seurat)
-
 CONTRAST <- 'old_vs_adult'
 KERNEL <- 'RBF'
 
@@ -16,7 +14,7 @@ source('src/R/compute_exceedence_metrics.R')
 source('src/R/compute_exceedence_statistics.R')
 
 funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_res.rds'))
-load('data/temp/domain.rdata')
+load('data/temp/test_domain.rdata')
 
 filtered.res <- res.fungp %>% arrange(desc(neglogp)) %>% filter(gene %in% genes & abs(deviation) > 1) 
 
@@ -31,6 +29,7 @@ dev.off()
 #===================================================================
 ## read list of seurat objects with representative images
 #===================================================================
+library(Seurat)
 dxlist <- read_rds('~/Desktop/slide_list.rds')
 dxlist <- lapply(dxlist, NormalizeData)
 dxlist
@@ -56,18 +55,23 @@ r_tx <- rdist::cdist(x_test, x_observed) ; dsqtx <- r_tx^2
 #===================================================================
 ## make posterior fits for genes i am visualizing
 #===================================================================
-# genes_to_plot <- c('Ctps1','Fezf2' ,'Myt1l', 'Cd19')
+genes_to_plot <- c('Foxp2', 'C4b')
+funGP_res <- read_csv(glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
+top_diff <- funGP_res %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 5), 
+                                                              slice_tail(., n = 5)) %>% pull(gene)}
+
+genes_to_plot <- top_diff
 genes_to_plot <- filtered.res %>% arrange(desc(deviation)) %>% pull(gene)
 condition <- 'diff_benchmark_multiple'
 length(genes_to_plot)
-source('src/scripts/02_visualize_fitted_GPs.R')
+source('src/argo/02_visualize_fitted_GPs.R')
 
 plots <- visualize_fitted_GP(genes_to_plot, params = params, FILTER_TO_CONTRAST = T)
 px <- wrap_plots(plots, ncol = 4) + 
   plot_layout(guides = "collect")
 
-ggsave(px,filename = file.path('figs', glue('posterior_fit_{condition}.pdf')),
-       width=25,height=15)
+ggsave(plots[[1]],filename = file.path('figs', glue('FOXP2_posterior_fit.pdf')),
+       width=10,height=4)
 
 #===================================================================
 ## visualize some representative genes in space
@@ -77,13 +81,14 @@ roi <- lapply(funGP_fits[genes_to_plot], function(kxx) x_test[which(abs(kxx$stat
 sapply(roi, length)
 
 ## extract counts for genes of interest across all slides
+
 cts <- do.call('cbind', lapply(dxlist[3:6], function(dx) LayerData(dx)[genes_to_plot, ]))
 isodepth_bins <- do.call('c', lapply(dxlist[3:6], function(dx) dx[['binned_isodepth', drop=T]]))
 
 
-par(mai = c(1.0, 1, 0.8, 0.4)) 
-boxplot(cts['Fezf2', ]~ dfm$age, xlab = 'Age group', ylab = 'Fezf2',
-        font.axis = 2, font.lab = 2, cex.axis=1.5, cex.lab = 1.5)
+# par(mai = c(1.0, 1, 0.8, 0.4)) 
+# boxplot(cts['C4b', ]~ dfm$age, xlab = 'Age group', ylab = 'C4b',
+#         font.axis = 2, font.lab = 2, cex.axis=1.5, cex.lab = 1.5)
 
 
 ## need to set thresholds across all three age groups by roi
@@ -115,7 +120,7 @@ figs <- lapply(genes_to_plot, function(gene) {
   message(gene)
   rx <- roi[[gene]];
   cx <- cts[gene, (isodepth_bins %in% rx)];
-  gene_thresh <- quantile(cx[cx > 0], c(.25,  .75, 0.9));
+  gene_thresh <- quantile(cx[cx > 0], c(0.5,  .75, 0.99));
   lapply(dxlist[3:6], highlight_roi, rx, gene_thresh, gene )
   }
 )
@@ -126,12 +131,21 @@ plots <- lapply(genes_to_plot, function(gene) {
   row_plot <- wrap_plots(figs[[gene]], ncol = 4) + 
     plot_layout(guides = "collect") + 
     plot_annotation(title = glue('{gene} ROI'))
-  wrap_elements(row_plot)
-}
+  # wrap_elements(row_plot)
+  row_plot
+  }
 )
 
-pdf(glue('figs/{condition}_spatial_ROI_low_thresh.pdf'), width = 14, height = 15)
-print(wrap_plots(plots, nrow=4) + 
+
+pdf('figs/FOXP2_spatial.pdf', width = 14, height = 3.5)
+plots[[1]]
+dev.off()
+
+dynamic_height <- max(6, length(genes_to_plot) * 3.5)
+pdf(glue('figs/{CONTRAST}_spatial_ROI_full_range.pdf'), 
+    width = 14, height = dynamic_height)
+print(wrap_plots(plots, nrow = length(genes_to_plot)) + 
         plot_annotation(title = glue('{CONTRAST}')))
 dev.off()
+
 

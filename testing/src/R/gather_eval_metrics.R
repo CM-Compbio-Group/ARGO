@@ -10,5 +10,5 @@ for(expt in seq_len(nrow(expt_df))){
                                         effect_genes, null_genes, fdr_thresh = 0.05))
 }
 
-write_rds(eval.metrics, 'testing/output/diff_testing_results_EXPT3.rds')
+write_rds(eval.metrics, 'testing/output/diff_testing_eval_metrics.rds')
 

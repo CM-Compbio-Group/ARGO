@@ -84,6 +84,7 @@ if(RUN_INTERVAL_BENCHMARK){
 
 
 if(PLOT_RESULTS){
+  eval.metrics <- read_rds(glue('testing/output/diff_testing_results_EXPT3.rds'))
   metrics <- do.call(rbind, eval.metrics)
   method <- rownames(metrics)
   eval_long <- metrics %>% as_tibble() %>% 
@@ -119,10 +120,10 @@ if(PLOT_RESULTS){
       ) +
       theme(
         panel.grid = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1, size = 12),
-        axis.text.y = element_text(vjust = 1, hjust = 1, size = 12),
+        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1, size = 8),
+        axis.text.y = element_text(vjust = 1, hjust = 1, size = 10),
         legend.position = "none",
-        strip.text = element_text(face = "bold", size = 12),
+        strip.text = element_text(face = "bold", size = 8),
         panel.spacing.x = unit(2.5, "lines"),  # Horizontal space between columns
         panel.spacing.y = unit(2.5, "lines"),   # Increased vertical space between rows
         plot.margin = margin(t = 20, r = 20, b = 30, l = 20, unit = "pt") 
@@ -130,7 +131,7 @@ if(PLOT_RESULTS){
     
     
     ggsave(plot = p, filename = glue('testing/figs/{metrx}_evaluation.pdf'), 
-           device = 'pdf', width = 15, height = 15)
+           device = 'pdf', width = 8, height = 8)
     
   }
 }

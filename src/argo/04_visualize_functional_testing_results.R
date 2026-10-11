@@ -18,14 +18,16 @@ source('src/R/plot_conf_bands.R')
 source('src/R/compute_exceedence_metrics.R')
 source('src/R/compute_exceedence_statistics.R')
 
-funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_res.rds'))
-load('data/temp/domain.rdata')
+KERNEL <- 'RBF'
+CONTRAST <- 'adult_vs_others'
+funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_fullgrid_res.rds'))
+load('data/temp/test_domain.rdata')
 
 #----------------------------------------------------
 ## make deviation-heatmaps to summarize funGP findings
 #----------------------------------------------------
 stat_binary <- compute_stat_binary(funGP_fits, M)
-pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap.pdf'), width = 8, height = 8)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap_fullgrid.pdf'), width = 8, height = 8)
 binary_colors <- c("1" = "red3","0" = "lightgrey", "-1" = "navy")
 Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
         show_row_names = T,
@@ -39,7 +41,7 @@ dev.off()
 #----------------------------------------------------
 
 stat_lfc <- compute_stat_continuous(funGP_fits, M)
-pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap.pdf'), width = 8, height =8)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap_fullgrid.pdf'), width = 8, height =8)
 Heatmap(stat_lfc, cluster_columns = F, name = 'FC \nstatistic',
         row_names_gp = gpar(fontsize=2),
         column_names_gp = gpar(fontsize=4))
@@ -64,7 +66,7 @@ funGP_res <- funGP_fits %>%
 
 #----------------------------------------------------
 ## summarize the exceedence results in a plot
-pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_stats_summary.pdf'), width = 8, height = 8)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_stats_summary_fullgrid.pdf'), width = 8, height = 8)
 par(mfrow = c(2,2),  mar = c(4, 4, 4, 4) + 0.25, family = 'Arial', ps=12)
 with(funGP_res, plot(poe_up,poe_down, pch = 20, cex=1.5, 
                    col = adjustcolor(col='red', alpha=.5),
@@ -103,12 +105,14 @@ summary_stats <- map_dfr(thresh, function(t) {
 
 summary_stats
 
+funGP_res <- funGP_res %>% mutate(fdr = p.adjust(exp(-neglogp), method = 'BH'))
 ## save to file
-write_csv(funGP_res, file = glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
+write_csv(funGP_res, file = glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing_fullgrid.csv'))
+funGP_res <- read_csv(glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
 #--------------------------------
 ## rank cell types by their statistic
 #--------------------------------
-pdf(glue('figs/{KERNEL}_{CONTRAST}_ranked_plot.pdf'), width = 6, height = 6)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_ranked_plot_fullgrid.pdf'), width = 6, height = 6)
 ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   # Draws the main sorted line/points
   geom_line(color = "grey70") +
@@ -149,7 +153,7 @@ dev.off()
 #--------------------------------
 v_thresh <- 0.5
 h_thresh <- -log(0.05)
-pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_volcano.pdf'), width = 8, height = 6)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_volcano_fullgrid.pdf'), width = 8, height = 6)
 funGP_res %>% mutate(status = case_when(
   neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',
   neglogp > h_thresh & deviation < -v_thresh ~ 'Downreg',
@@ -183,8 +187,9 @@ ggplot(aes(x = deviation, y = neglogp)) +
   # 4. Axis Labels
   labs(
     x = "max deviation (LFC)",
-    y = expression(-log[10]~"analytic")
-  ) + xlim(c(-3.5, 3.5)) + 
+    y = expression(-log~"analytic")
+  ) +
+  # xlim(c(-3.5, 3.5)) + 
   # 5. Clean, professional theme minimalization
   theme_bw(base_family = 'Arial') +
   theme(
@@ -203,8 +208,8 @@ dev.off()
 #-------------------------------------
 ## visualize conf bands for significant genes
 #-------------------------------------
-top_diff <- funGP_res %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 5), 
-                                  slice_tail(., n = 5)) %>% pull(gene)}
+top_diff <- funGP_res %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 3), 
+                                  slice_tail(., n = 3)) %>% pull(gene)}
 
 conf_band_plots <- lapply(top_diff, function(cell) 
                                     plot_CI_bands(cell, x = x_test, 
@@ -213,18 +218,26 @@ conf_band_plots <- lapply(top_diff, function(cell)
                                                alpha = 95)
 )
 
+# ggsave(conf_band_plots[[1]],
+#         filename = file.path('figs', glue('FOXP2_conf_bands.pdf')),
+#         width=6,height=4)
 
-ggsave( wrap_plots(conf_band_plots, ncol = 5) + 
+ggsave( wrap_plots(conf_band_plots, ncol = 3) + 
           plot_layout(guides = "collect"), 
-        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
-        width=18,height=8)
+        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands_fullgrid.pdf')),
+        width=10,height=6)
 
 #-------------------------------------
 ## visualize posterior fits for these genes
 #-------------------------------------
-source('src/scripts/02_visualize_fitted_GPs.R')
-plots <- visualize_fitted_GP(genes_to_plot = top_diff, kernel_params = params, FILTER_TO_CONTRAST = T)
-ggsave( wrap_plots(plots, ncol = 5) + 
+source('src/argo/02_visualize_fitted_GPs.R')
+plots <- visualize_fitted_GP(genes_to_plot = top_diff, params = params, FILTER_TO_CONTRAST = F)
+ggsave( wrap_plots(plots, ncol = 3) + 
           plot_layout(guides = "collect"), 
-        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
-        width=18,height=8)
+        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits_fullgrid.pdf')),
+        width=15,height=8)
+
+
+# ggsave(plots[[1]],
+#        filename = file.path('figs', glue('FOXP2_posterior_fit.pdf')),
+#        width=8,height=4)
