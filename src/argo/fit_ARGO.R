@@ -19,11 +19,9 @@
 #' @param RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 #' @param conf_level_alpha = 0.95
 #' @param n_monte_carlo_simulations = 1000 # no.of monte carlo samples
-#' 
+#' @param kernel_params GP parameters for features to fit
 #' 
 #' @returns list of fitted kernel parameters and ARGO differential testing outputs
-
-
 
 
 fit_ARGO <- function(data_env){
@@ -34,9 +32,6 @@ fit_ARGO <- function(data_env){
   ## ensure inputs are valid
   if(!is.double(N) && !(N %% 1 == 0)){
     stop('Type Error : N must be integer')
-  }
-  if(!is.double(M) && !(M %% 1 == 0)){
-    stop('Type Error : M must be integer')
   }
   if(N < 10 || N > 100){
     stop('Value Error : number of intervals not in valid range')
@@ -97,6 +92,13 @@ fit_ARGO <- function(data_env){
   if(!(is.null(test_coords) || is_double(test_coords))){
     stop('Type Error: test_coords must be either NULL or a numeric vector')
   }
+  if(!(is.numeric(kernel_params))){
+    stop('Type Error : kernel params should be a numeric vector or matrix')
+  }
+  if(!(is.null(kernel_params)) && !(all(features_to_fit %in% rownames(kernel_params)))){
+    stop('Value Error: GP parameters not available for all requested features')
+  }
+
   
   
   ## define a new function environment 
@@ -123,71 +125,78 @@ fit_ARGO <- function(data_env){
     }
   })
   
-  #--------------------------------
-  ## set constraints for kernel bandwidth
-  #--------------------------------
-  min_bw <- min(dist(isodepth_)) * 0.5
-  min_log_bw <- log(min_bw)
-  max_bw <- 3*diff(range(isodepth_))
-  max_log_bw <- log(max_bw)
-  n_noise <- length(unique(argo_env$noise_diag)) # number of noise parameters to fit
-  
-  #===================================================================
-  ## parameter estimation for each feature
-  #===================================================================
-  message(glue('now fitting gp parameters for {length(data_env$features_to_fit)} features'))
-  
-  kernel_params <- vector('list', length = length(data_env$features_to_fit))
-  for(feature in data_env$features_to_fit){
-    argo_env$feature_vec <- data_env$counts[, feature] # extract counts data for this feature
+  if(is.null(kernel_params)){
+    # only fit likelihood model when parameters are not available
+    #--------------------------------
+    ## set constraints for kernel bandwidth
+    #--------------------------------
+    min_bw <- min(dist(isodepth_)) * 0.5
+    min_log_bw <- log(min_bw)
+    max_bw <- 3*diff(range(isodepth_))
+    max_log_bw <- log(max_bw)
+    n_noise <- length(unique(argo_env$noise_diag)) # number of noise parameters to fit
     
-    # randomly initialize likelihood parameters 
-    log_bw <- runif(1, log(.1), log(.5))
-    # compute empirical variation in expt1 by condition group
-    if(data_env$FIT_CONDITIONAL_NOISE){
-      emp_sd <- tapply(argo_env$feature_vec, data_env$metadata$condition, sd, na.rm = T)
-    }else{
-      emp_sd <- sd(argo_env$feature_vec, na.rm=T)
+    #===================================================================
+    ## parameter estimation for each feature
+    #===================================================================
+    message(glue('now fitting gp parameters for {length(data_env$features_to_fit)} features'))
+    
+    kernel_params <- vector('list', length = length(data_env$features_to_fit))
+    for(feature in data_env$features_to_fit){
+      argo_env$feature_vec <- data_env$counts[, feature] # extract counts data for this feature
+      
+      # randomly initialize likelihood parameters 
+      log_bw <- runif(1, log(.1), log(.5))
+      # compute empirical variation in expt1 by condition group
+      if(data_env$FIT_CONDITIONAL_NOISE){
+        emp_sd <- tapply(argo_env$feature_vec, data_env$metadata$condition, sd, na.rm = T)
+      }else{
+        emp_sd <- sd(argo_env$feature_vec, na.rm=T)
+      }
+      
+      log_sigma_f <-  log(mean(emp_sd) * sqrt(0.7)) ## 70% variance to signal
+      log_sigma_n <- log(emp_sd * sqrt(0.3)) ## 30% variance to noise
+      
+      if(data_env$FIT_DONOR){
+        sd_val <- tapply(argo_env$feature_vec, data_env$metadata$condition_key, sd, na.rm=T); # SD across donors within each bin
+        log_sigma_d <- mean(sd_val, na.rm=T) # mean SD across all age groups
+      }else{
+        log_sigma_d <- 0
+      }
+      
+      parInt <- c(log_bw, log_sigma_f, log_sigma_d, log_sigma_n)
+      
+      optimResult = stats::optim(par = parInt, 
+                                 fn = computeNegLogLikelihood, 
+                                 gr = computeNegLogLikelihoodGradient,
+                                 argo_env = argo_env, # pass the current environment
+                                 method = 'L-BFGS-B', 
+                                 lower = c(min_log_bw, rep(-3, 2 + n_noise)),
+                                 upper = c(max_log_bw,  rep(3, 2 + n_noise)),
+                                 control = list(maxit = 1000, 
+                                                trace = 0)
+      )
+      
+      kernel_params[[feature]] <- c(bandwidth = exp(optimResult$par[1]), 
+                                    sigma_f = exp(optimResult$par[2]), 
+                                    sigma_d = exp(optimResult$par[3]), 
+                                    sigma_n = exp(optimResult$par[4:(4 + n_noise - 1)]))
+      
+      
     }
     
-    log_sigma_f <-  log(mean(emp_sd) * sqrt(0.7)) ## 70% variance to signal
-    log_sigma_n <- log(emp_sd * sqrt(0.3)) ## 30% variance to noise
+    argo_env$kernel_params <- do.call('rbind', kernel_params)
+    colnames(argo_env$kernel_params) <- c('bandwidth', 'sigma_f','sigma_d', paste('sigma_n', 1:n_noise, sep = ''))
     
-    if(data_env$FIT_DONOR){
-      sd_val <- tapply(argo_env$feature_vec, data_env$metadata$condition_key, sd, na.rm=T); # SD across donors within each bin
-      log_sigma_d <- mean(sd_val, na.rm=T) # mean SD across all age groups
-    }else{
-      log_sigma_d <- 0
-    }
-    
-    parInt <- c(log_bw, log_sigma_f, log_sigma_d, log_sigma_n)
-    
-    optimResult = stats::optim(par = parInt, 
-                               fn = computeNegLogLikelihood, 
-                               gr = computeNegLogLikelihoodGradient,
-                               argo_env = argo_env, # pass the current environment
-                               method = 'L-BFGS-B', 
-                               lower = c(min_log_bw, rep(-3, 2 + n_noise)),
-                               upper = c(max_log_bw,  rep(3, 2 + n_noise)),
-                               control = list(maxit = 1000, 
-                                              trace = 0)
-    )
-    
-    kernel_params[[feature]] <- c(bandwidth = exp(optimResult$par[1]), 
-                               sigma_f = exp(optimResult$par[2]), 
-                               sigma_d = exp(optimResult$par[3]), 
-                               sigma_n = exp(optimResult$par[4:(4 + n_noise - 1)]))
-    
-    
+  }else{
+    message('GP kernel parameters provided by user')
+    argo_env$kernel_params <- kernel_params
   }
-  
-  argo_env$kernel_params <- do.call('rbind', kernel_params)
-  colnames(argo_env$kernel_params) <- c('bandwidth', 'sigma_f','sigma_d', paste('sigma_n', 1:n_noise, sep = ''))
-  
+    
   # visualize the posterior fits for genes
   # message('now plotting posterior fits')
   # posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
-  # plot(wrap_plots(posteriors, nrow=length(data_env$features_to_fit)/2))  
+  # plot(wrap_plots(posteriors, nrow=length(data_env$features_to_fit)/2))
   
   message('now running contrast tests')
   funGP_fits <- list()
@@ -203,7 +212,7 @@ fit_ARGO <- function(data_env){
   # }
   # plot(wrap_plots(ci_plots, nrow = length(data_env$features_to_fit)/2))
     
-  return(list(resObjects = funGP_fits, 
+  return(list(resObjects = funGP_fits,
               params = argo_env$kernel_params)
          )
   

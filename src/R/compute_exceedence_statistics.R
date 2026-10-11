@@ -38,6 +38,7 @@ compute_stat_continuous <- function(funGP_fits, M){
   stat_lfc <- lapply(funGP_fits, function(res) {
     stat <- res[['statistic']]; 
     band <- res[['band']];
+    # stat - band
     case_when(
       abs(stat) > band ~ (stat - band),
       TRUE ~ 0

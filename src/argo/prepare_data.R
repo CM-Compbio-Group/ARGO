@@ -4,7 +4,8 @@ library(tidyverse)
 library(anndata)
 library(glue)
 library(patchwork)
-
+library(ComplexHeatmap)
+library(ggrepel)
 
 CHECK_SPARSITY <- FALSE
 
@@ -160,8 +161,10 @@ data_env$CONTRAST_VECTOR <- c(0, -1, 1)
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
 data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
-data_env$features_to_fit <- colnames(bin_cts)
+# data_env$features_to_fit <- colnames(bin_cts)
+data_env$features_to_fit <- c('Ctps1', 'Grin2b', 'Fam107a', 'Nfkbia')
 data_env$test_coords <- NULL
+data_env$kernel_params <- NULL
 
 
 #============================================================

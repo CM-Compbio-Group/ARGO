@@ -23,16 +23,17 @@ CONTRAST <- 'adult_vs_others'
 funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_fullgrid_res.rds'))
 load('data/temp/test_domain.rdata')
 
+funGP_fits <- res.ARGO$resObjects
 #----------------------------------------------------
 ## make deviation-heatmaps to summarize funGP findings
 #----------------------------------------------------
-stat_binary <- compute_stat_binary(funGP_fits, M)
+stat_binary <- compute_stat_binary(funGP_fits, N)
 pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap_fullgrid.pdf'), width = 8, height = 8)
 binary_colors <- c("1" = "red3","0" = "lightgrey", "-1" = "navy")
 Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
         show_row_names = T,
-        row_names_gp = gpar(fontsize=2),
-        column_names_gp = gpar(fontsize=4),
+        row_names_gp = gpar(fontsize=8),
+        column_names_gp = gpar(fontsize=8),
         col = binary_colors,
         heatmap_legend_param = list(color_bar = "discrete")
 )
@@ -40,24 +41,24 @@ dev.off()
 
 #----------------------------------------------------
 
-stat_lfc <- compute_stat_continuous(funGP_fits, M)
+stat_lfc <- compute_stat_continuous(funGP_fits, N)
 pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap_fullgrid.pdf'), width = 8, height =8)
 Heatmap(stat_lfc, cluster_columns = F, name = 'FC \nstatistic',
-        row_names_gp = gpar(fontsize=2),
-        column_names_gp = gpar(fontsize=4))
+        row_names_gp = gpar(fontsize=8),
+        column_names_gp = gpar(fontsize=8))
 dev.off()
 
 #-------------------------------------
 ## gather results from tests
 #-------------------------------------
 ## compute exceedence metrics
-exc.metrics <- do.call('rbind', lapply(funGP_fits, compute_exceedence_metrics, x_test))
+exc.metrics <- do.call('rbind', lapply(funGP_fits, compute_exceedence_metrics, data_env$isodepth_))
 
 ## aggregate results from functional testing
 funGP_res <- funGP_fits %>%
-  map_dfr(`[`, c('neglogp', 'deviation', 'index'), .id = 'gene') %>%
+  map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
   bind_cols(exc.metrics) %>%
-  mutate(across(c(neglogp, deviation, index), as.numeric)) %>% 
+  mutate(across(c(neglogp, deviation), as.numeric)) %>% 
   mutate(stats = neglogp * sign(deviation), 
          net_auec = auec_up - auec_down,
          net_poe = poe_up - poe_down) %>%
@@ -91,6 +92,7 @@ with(funGP_res, plot(net_auec~Rank, pch = 20, cex=1.5,
 
 dev.off()
 
+par(mfrow=c(1,1))
 #----------------------------------------------------
 ## DGE testing statistics at different effect-size threholds
 thresh <- c(.25, .5, .75, 1)
@@ -113,6 +115,7 @@ funGP_res <- read_csv(glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv
 ## rank cell types by their statistic
 #--------------------------------
 pdf(glue('figs/{KERNEL}_{CONTRAST}_ranked_plot_fullgrid.pdf'), width = 6, height = 6)
+
 ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   # Draws the main sorted line/points
   geom_line(color = "grey70") +
@@ -146,14 +149,16 @@ ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
     axis.title = element_text(size = 14),
     axis.text = element_text(size=14)
   )
+
 dev.off()
 
 #--------------------------------
 ## enhanced volcano plot
 #--------------------------------
-v_thresh <- 0.5
+v_thresh <- 0.05
 h_thresh <- -log(0.05)
 pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_volcano_fullgrid.pdf'), width = 8, height = 6)
+
 funGP_res %>% mutate(status = case_when(
   neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',
   neglogp > h_thresh & deviation < -v_thresh ~ 'Downreg',
@@ -201,6 +206,7 @@ ggplot(aes(x = deviation, y = neglogp)) +
   guides(
     color = guide_legend(override.aes = list(size = 5, alpha = 1))
   )
+
 dev.off()
 
 
