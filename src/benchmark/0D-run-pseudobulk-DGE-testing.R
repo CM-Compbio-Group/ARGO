@@ -1,6 +1,6 @@
 ## run DGE testing on pseudo-bulk counts data with different tools and compare performance
 # rm(list=ls())
-source('src/scripts/00-load-packages.R')
+source('src/argo/00-load-packages.R')
 CONTRAST <- 'old_vs_adult'
 
 ## scripts to gather DGE testing results

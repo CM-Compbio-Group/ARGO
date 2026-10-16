@@ -23,7 +23,8 @@ plot_CI_bands <- function(feature, res, argo_env){
       labs(
         x = "Isodepth value",
         y = "Mean Difference",
-        title = glue("{conf_level_alpha}% Confidence band for {.feature}")
+        title = .feature
+        # title = glue("{conf_level_alpha*100}% Confidence band for {.feature}")
       ) +
       theme_minimal()
     

@@ -26,7 +26,7 @@ bin_level_counts <- rowsum(as.matrix(cell_level_counts), group = cell_level_meta
 # tradeseq_counts <- rowsum(as.matrix(cell_level_counts), group = cell_level_meta$slide_tradeseq) 
 
 ## filter bin counts to remove sparse bins (that have fewer than 25 cells)
-bin_level_counts <- bin_level_counts[bin_level_meta$slide_bin, ]
+bin_level_cdounts <- bin_level_counts[bin_level_meta$slide_bin, ]
 
 ## assert that sample IDs match
 stopifnot(all(rownames(bin_level_counts) == bin_level_meta$slide_bin))
@@ -77,6 +77,7 @@ res.list <- read_rds('output/DGE_testing_res_list.rds')
 #===============================================================
 ## benchmarking
 #===============================================================
+require(readxl)
 require(UpSetR)
 require(VennDiagram)
 library(PRROC)
@@ -120,8 +121,8 @@ venn_object <- venn.diagram(
   x = dataset,
   filename = NULL,
   # Styling the circles
-  fill = c("#8dd3c7", "#ffffb3", "#bebada"),
-  alpha = rep(0.5, 3), # Transparency
+  fill = c("#8dd3c7", "#ffffb3", "#bebada", "dodgerblue3"),
+  alpha = rep(0.5, 4), # Transparency
   lty = "blank",            # Removes the black borders
   # Styling text
   cex = 1.5,                # Numbers size
@@ -138,13 +139,13 @@ dev.off()
 ## get AUPRC curves
 #============================================================
 ## find what genes in our filtered list are not in any of the benchmarks
-markers <- Reduce(union, dataset)
-markers <- intersect(markers, res.argo$gene)
-genes <- setdiff(res.sig$ARGO, markers)
-res.argo %>% arrange(desc(neglogp)) %>% filter(gene %in% genes & abs(deviation) > 1)
+# markers <- Reduce(union, dataset)
+# markers <- intersect(markers, res.list$DESeq2$gene)
+# genes <- setdiff(res.sig$ARGO, markers)
+# res.argo %>% arrange(desc(neglogp)) %>% filter(gene %in% genes & abs(deviation) > 1)
 
 
-dataset <- lapply(dataset, function(x) intersect(x, res.argo$gene))
+dataset <- lapply(dataset, function(x) intersect(x, funGP.df$gene))
 sapply(dataset, length)
 
 STATISTIC <- 'PR'
@@ -182,15 +183,15 @@ for(study in names(dataset)){
        main = glue("{study} \n Precision-Recall Curve"), 
        auc.main = F, lty=2)
   ## plot other curves
-  for(ii in seq(1,5)){
+  for(ii in seq(1,2)){
     method = names(pr.curves)[ii]
     plot(pr.curves[[method]], col = adjustcolor(cols[ii + 1], alpha.f = .5), lty = 2, lwd = 2, add = TRUE)
   }
-  ## make legends
+  # make legends
   if(STATISTIC == 'PR'){
-    lgx <- paste("ARGO (AUPRC = ", round(pr.curves[['ARGO']]$auc.integral, 3), ")")  
+    lgx <- paste("ARGO (AUPRC = ", round(pr.curves[['ARGO']]$auc.integral, 3), ")")
   }else if(STATISTIC == 'ROC'){
-    lgx <- paste("ARGO (AUPRC = ", round(pr.curves[['ARGO']]$auc, 3), ")")
+    lgx <- paste("ARGO (AUROC = ", round(pr.curves[['ARGO']]$auc, 3), ")")
   }
   
   for(method in names(pr.curves)[1:5]){
@@ -200,7 +201,7 @@ for(study in names(dataset)){
       )
     }else if(STATISTIC == 'ROC'){
       lgx <- c(lgx, 
-               glue("{method} (AUPRC = {round(pr.curves[[method]]$auc, 3)}) ")
+               glue("{method} (AUROC = {round(pr.curves[[method]]$auc, 3)}) ")
       )
     }
     

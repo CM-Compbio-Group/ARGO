@@ -19,20 +19,20 @@ source('src/R/compute_exceedence_metrics.R')
 source('src/R/compute_exceedence_statistics.R')
 
 KERNEL <- 'RBF'
-CONTRAST <- 'adult_vs_others'
-funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_fullgrid_res.rds'))
-load('data/temp/test_domain.rdata')
+CONTRAST <- 'old_vs_adult'
+# funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_res.rds'))
+# load('data/temp/test_domain.rdata')
 
 funGP_fits <- res.ARGO$resObjects
 #----------------------------------------------------
 ## make deviation-heatmaps to summarize funGP findings
 #----------------------------------------------------
 stat_binary <- compute_stat_binary(funGP_fits, N)
-pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap_fullgrid.pdf'), width = 8, height = 8)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap.pdf'), width = 8, height = 8)
 binary_colors <- c("1" = "red3","0" = "lightgrey", "-1" = "navy")
 Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
         show_row_names = T,
-        row_names_gp = gpar(fontsize=8),
+        row_names_gp = gpar(fontsize=2),
         column_names_gp = gpar(fontsize=8),
         col = binary_colors,
         heatmap_legend_param = list(color_bar = "discrete")
@@ -42,9 +42,9 @@ dev.off()
 #----------------------------------------------------
 
 stat_lfc <- compute_stat_continuous(funGP_fits, N)
-pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap_fullgrid.pdf'), width = 8, height =8)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap.pdf'), width = 8, height =8)
 Heatmap(stat_lfc, cluster_columns = F, name = 'FC \nstatistic',
-        row_names_gp = gpar(fontsize=8),
+        row_names_gp = gpar(fontsize=2),
         column_names_gp = gpar(fontsize=8))
 dev.off()
 
@@ -52,7 +52,7 @@ dev.off()
 ## gather results from tests
 #-------------------------------------
 ## compute exceedence metrics
-exc.metrics <- do.call('rbind', lapply(funGP_fits, compute_exceedence_metrics, data_env$isodepth_))
+exc.metrics <- do.call('rbind', lapply(funGP_fits, compute_exceedence_metrics, isodepth_))
 
 ## aggregate results from functional testing
 funGP_res <- funGP_fits %>%
@@ -67,7 +67,7 @@ funGP_res <- funGP_fits %>%
 
 #----------------------------------------------------
 ## summarize the exceedence results in a plot
-pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_stats_summary_fullgrid.pdf'), width = 8, height = 8)
+pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_stats_summary.pdf'), width = 8, height = 8)
 par(mfrow = c(2,2),  mar = c(4, 4, 4, 4) + 0.25, family = 'Arial', ps=12)
 with(funGP_res, plot(poe_up,poe_down, pch = 20, cex=1.5, 
                    col = adjustcolor(col='red', alpha=.5),
@@ -109,13 +109,12 @@ summary_stats
 
 funGP_res <- funGP_res %>% mutate(fdr = p.adjust(exp(-neglogp), method = 'BH'))
 ## save to file
-write_csv(funGP_res, file = glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing_fullgrid.csv'))
+write_csv(funGP_res, file = glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
 funGP_res <- read_csv(glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
 #--------------------------------
 ## rank cell types by their statistic
 #--------------------------------
-pdf(glue('figs/{KERNEL}_{CONTRAST}_ranked_plot_fullgrid.pdf'), width = 6, height = 6)
-
+pdf(glue('figs/{KERNEL}_{CONTRAST}_ranked_plot.pdf'), width = 6, height = 6)
 ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   # Draws the main sorted line/points
   geom_line(color = "grey70") +
@@ -139,9 +138,9 @@ ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   ) +
   # Labels and clean styling
   labs(
-    x = "",
+    x = "Rank",
     y = "Signed neglogp",
-    title = glue("funGP Rank Statistics")
+    title = glue("ARGO Rank Statistics")
   ) +
   theme_classic(base_family = 'Arial') +
   theme(
@@ -149,16 +148,14 @@ ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
     axis.title = element_text(size = 14),
     axis.text = element_text(size=14)
   )
-
 dev.off()
 
 #--------------------------------
 ## enhanced volcano plot
 #--------------------------------
-v_thresh <- 0.05
+v_thresh <- 1
 h_thresh <- -log(0.05)
-pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_volcano_fullgrid.pdf'), width = 8, height = 6)
-
+pdf(glue('figs/{KERNEL}_{CONTRAST}_exceedence_volcano.pdf'), width = 8, height = 6)
 funGP_res %>% mutate(status = case_when(
   neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',
   neglogp > h_thresh & deviation < -v_thresh ~ 'Downreg',
@@ -206,7 +203,6 @@ ggplot(aes(x = deviation, y = neglogp)) +
   guides(
     color = guide_legend(override.aes = list(size = 5, alpha = 1))
   )
-
 dev.off()
 
 
@@ -230,7 +226,7 @@ conf_band_plots <- lapply(top_diff, function(cell)
 
 ggsave( wrap_plots(conf_band_plots, ncol = 3) + 
           plot_layout(guides = "collect"), 
-        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands_fullgrid.pdf')),
+        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
         width=10,height=6)
 
 #-------------------------------------
@@ -240,10 +236,25 @@ source('src/argo/02_visualize_fitted_GPs.R')
 plots <- visualize_fitted_GP(genes_to_plot = top_diff, params = params, FILTER_TO_CONTRAST = F)
 ggsave( wrap_plots(plots, ncol = 3) + 
           plot_layout(guides = "collect"), 
-        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits_fullgrid.pdf')),
+        filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
         width=15,height=8)
 
 
 # ggsave(plots[[1]],
 #        filename = file.path('figs', glue('FOXP2_posterior_fit.pdf')),
 #        width=8,height=4)
+
+#=======================================================
+# find genes with partial spans
+#=======================================================
+with(funGP_res, plot(net_poe))
+res <- filter(funGP_res, abs(net_poe) < .5 & abs(net_poe) > .25 & fdr < .05)
+res
+
+col_fun = colorRamp2(c(-2, 0, 2), c("blue3", "lightgrey", "red3"))
+pdf(glue('figs/{KERNEL}_{CONTRAST}_partial_extent_FC_heatmap.pdf'), width = 6, height =6)
+Heatmap(stat_lfc[res$gene, ], cluster_columns = F, 
+        name = 'FC \nstatistic', col = col_fun,
+        row_names_gp = gpar(fontsize=8),
+        column_names_gp = gpar(fontsize=8))
+dev.off()

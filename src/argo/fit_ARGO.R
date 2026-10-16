@@ -16,6 +16,7 @@
 #' @param FIT_CONDITIONAL_NOISE = TRUE # logical -- whether to fit condition specific noise for GPs
 #' @param LAMBDA <- 1 # regularization for noise terms in GP fits
 #' @param CONTRAST_VECTOR <- c(0, -1, 1)
+#' @param CONTRAST contrast being tested in words
 #' @param RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 #' @param conf_level_alpha = 0.95
 #' @param n_monte_carlo_simulations = 1000 # no.of monte carlo samples
@@ -194,9 +195,13 @@ fit_ARGO <- function(data_env){
   }
     
   # visualize the posterior fits for genes
-  # message('now plotting posterior fits')
-  # posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
-  # plot(wrap_plots(posteriors, nrow=length(data_env$features_to_fit)/2))
+  message('now plotting posterior fits')
+  posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
+  ggsave(wrap_plots(posteriors, ncol = 3) + 
+         plot_layout(guides = "collect"), 
+         filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
+         width=12,height=6)
+  
   
   message('now running contrast tests')
   funGP_fits <- list()
@@ -205,16 +210,25 @@ fit_ARGO <- function(data_env){
                                      argo_env)
   }
   
-  # message('now plotting confidence bands')
-  # ci_plots <- list()
-  # for(feature in data_env$features_to_fit){
-  #   ci_plots[[feature]] <- plot_CI_bands(feature, funGP_fits[[feature]], argo_env)
-  # }
-  # plot(wrap_plots(ci_plots, nrow = length(data_env$features_to_fit)/2))
-    
-  return(list(resObjects = funGP_fits,
-              params = argo_env$kernel_params)
-         )
+  
+  
+  message('now plotting confidence bands')
+  ci_plots <- list()
+  for(feature in data_env$features_to_fit){
+    ci_plots[[feature]] <- plot_CI_bands(feature, funGP_fits[[feature]], argo_env)
+  }
+  ggsave( wrap_plots(ci_plots, ncol = 3) + 
+            plot_layout(guides = "collect"), 
+          filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
+          width=10,height=5)
+  
+  
+  if(is.null(data_env$kernel_params)){ # only return results if parameters are not known already
+    return(list(resObjects = funGP_fits,
+                params = argo_env$kernel_params)
+    )  
+  }  
+  
   
 }
 

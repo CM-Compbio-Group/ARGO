@@ -158,13 +158,14 @@ data_env$FIT_DONOR <- FALSE
 data_env$FIT_CONDITIONAL_NOISE <- TRUE
 data_env$LAMBDA <- 1 # regularization for noise terms in GP fits
 data_env$CONTRAST_VECTOR <- c(0, -1, 1)
+data_env$CONTRAST <- 'old_vs_adult'
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
 data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
 # data_env$features_to_fit <- colnames(bin_cts)
-data_env$features_to_fit <- c('Ctps1', 'Grin2b', 'Fam107a', 'Nfkbia')
+data_env$features_to_fit <- top_diff
 data_env$test_coords <- NULL
-data_env$kernel_params <- NULL
+data_env$kernel_params <- res.ARGO$params[top_diff, ]
 
 
 #============================================================
@@ -192,3 +193,47 @@ funGP.df <- res.ARGO$resObjects %>%
   mutate(Rank = row_number())
 
 write_rds(res.ARGO, file = 'output/old_vs_adult_N30_diff_testing_results.rds')
+
+#============================================================
+## make dotplots for the top differential genes
+#============================================================
+sce <- SingleCellExperiment(assays = list(counts = t(counts)), 
+                            colData = metadata)
+sce <- scater::logNormCounts(sce)
+
+dot_df <- as.data.frame(colData(sce)[, c("condition", "donor_id", "sample_id")]) %>%
+  mutate(sample_id = paste('slide', sample_id, sep = '_')) %>%
+  bind_cols(as.data.frame(t(as.matrix(assay(sce, "logcounts")[genes_to_plot, ]) ))) %>%
+  pivot_longer(
+    cols = all_of(genes_to_plot),
+    names_to = "gene",
+    values_to = "expr"
+  ) %>%
+  group_by(gene, condition, donor_id, sample_id) %>%
+  summarize(
+    pct_exp = mean(expr > 0) * 100,
+    mean_exp = mean(expr),
+    .groups = "drop"
+  ) %>%
+  # Z-score mean expression per gene so all genes share a comparable color bar
+  group_by(gene) %>%
+  mutate(scaled_mean = as.numeric(scale(mean_exp))) %>%
+  ungroup()
+
+p <- ggplot(dot_df, aes(x = sample_id, y = factor(gene, levels = rev(genes_to_plot)))) +
+  geom_point(aes(size = pct_exp, color = scaled_mean)) +
+  facet_grid(~ condition, scales = "free_x", space = "free_x") +
+  scale_size_continuous(range = c(.25, 5), name = "% Expressing") +
+  scale_color_gradient2(low = 'blue3', high='red3', mid = 'lightgrey', 
+                        name = "Z-Scored\nMean Expr")+
+  labs(x = "", y = "Gene") +
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.background = element_rect(fill = "grey95"),
+    strip.text = element_text(face = "bold")
+  )
+
+ggsave(plot=p, filename = 'figs/top_diff_dotplot.pdf', width = 10, height = 6)
+
