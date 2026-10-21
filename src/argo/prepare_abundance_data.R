@@ -74,7 +74,7 @@ obs <- obs %>%
 
 # cell type abundance data
 abundance <- obs %>% 
-  count(grid_key, clust_annot, name = 'n_cells') %>%
+  dplyr::count(grid_key, clust_annot, name = 'n_cells') %>%
   group_by(grid_key) %>%
   mutate(total_cells = sum(n_cells),
          proportion = n_cells / total_cells) %>%
@@ -89,7 +89,7 @@ prop <- abundance %>% select(grid_key, clust_annot, proportion) %>%
   ) %>% column_to_rownames('grid_key') %>% as.matrix()
 
 
-pheatmap(t(prop), cluster_cols = FALSE)
+pheatmap(t(prop), cluster_cols = T)
 
 #=============================
 # prepare bin level metadata
@@ -113,7 +113,6 @@ filter(bin_meta, sparsity > 25) %>% with(table(bin))
 sum(bin_meta$sparsity > 25) / nrow(bin_meta) # about 4% of bins
 bin_meta <- filter(bin_meta, sparsity < 25)
 prop <- prop[bin_meta$grid_key, ]
-
 #========================================================================
 ## build the full unobserved regular spatial grid (n_slides x N)
 #========================================================================
@@ -135,7 +134,7 @@ for(i in seq_len(n_obs)){
   projection_matrix[i, matched_indices[i]] <- 1
 }
 
-image(projection_matrix)
+# image(projection_matrix)
 #=========================================
 ## prepare the coregionalization matrix
 #=========================================
@@ -166,7 +165,7 @@ plot(prop[, 'Olig-1']~ bin_meta$condition_key)
 plot(prop[, 'Olig-2']~ bin_meta$condition_key)
 plot(prop[, 'Olig-3']~ bin_meta$condition_key)
 
-
+#============================================================
 mean_abx <- rowsum(prop, bin_meta$condition_key) %>% as.data.frame() %>% rownames_to_column('condition_key') 
 mean_abx <- pivot_longer(mean_abx, cols = -condition_key, 
                          names_to = 'cell_type', 
@@ -213,16 +212,23 @@ data_env$KERNEL = 'RBF'
 data_env$FIT_DONOR <- FALSE
 data_env$FIT_CONDITIONAL_NOISE <- TRUE
 data_env$LAMBDA <- 1 # regularization for noise terms in GP fits
-data_env$CONTRAST_VECTOR <- c(1, -1/2, -1/2)
+
+data_env$CONTRAST_VECTOR <- c(0, -1, 1)
+data_env$CONTRAST <- 'old_vs_adult'
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
 data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
 data_env$features_to_fit <- colnames(prop)
 data_env$test_coords <- NULL
+data_env$PLOT_POSTERIOR <- FALSE
+data_env$PLOT_CONF_BANDS <- FALSE
+data_env$RETURN_FITS <- TRUE
 data_env$kernel_params <- res.ARGO$params # if my parameters are already fit, I don't want to fit likelihood again
 
 ## save variables to memory
 write_rds(data_env, file = 'output/abundance_data_env.rds')
+#============================================================
+data_env <- read_rds('output/abundance_data_env.rds')
 #============================================================
 ## source implementation modules
 #============================================================
@@ -237,35 +243,41 @@ source('src/R/compute_exceedence_statistics.R')
 source('src/R/plot_conf_bands.R')
 
 res.ARGO <- fit_ARGO(data_env)
-write_rds(res.ARGO, file = 'output/adult_vs_juvenile_N30_diff_abundance_results.rds')
+write_rds(res.ARGO, file = 'output/old_vs_adult_N30_diff_abundance_results.rds')
 #============================================================
 ## visualize results
 #============================================================
-funGP.df <- res.ARGO$resObjects %>%
+data_env$CONTRAST <- 'adult_vs_juvenile'
+res.ARGO <- read_rds(glue('output/{data_env$CONTRAST}_N30_diff_abundance_results.rds'))
+## compute exceedence metrics
+exc.metrics <- do.call('rbind', lapply(res.ARGO$resObjects, compute_exceedence_metrics, isodepth_))
+## aggregate results from functional testing
+funGP_res <- res.ARGO$resObjects %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
+  bind_cols(exc.metrics) %>%
   mutate(across(c(neglogp, deviation), as.numeric)) %>% 
   mutate(stats = neglogp * sign(deviation), 
-         fdr = p.adjust(exp(-neglogp), method = 'BH')
-  ) %>%
-  arrange(desc(neglogp)) %>%
-  mutate(Rank = row_number())
-
-funGP.df
+         net_auec = auec_up - auec_down,
+         net_poe = poe_up - poe_down) %>%
+  mutate(fdr = p.adjust(exp(-neglogp), method = 'BH')) %>%
+  arrange(desc(stats)) %>% 
+  mutate(Rank = row_number()) 
 
 #============================================================
 # Trumpet plot
-ggplot(funGP.df %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
+pdf(glue('figs/{data_env$CONTRAST}_abundance_ranked_plot.pdf'), width = 6, height = 6)
+plot(ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   # Draws the main sorted line/points
   geom_line(color = "grey70") +
   geom_point(color = "black", size = 1) +
   
   # Highlight the specific genes with a unique color
-  geom_point(data = . %>% {bind_rows(slice_head(., n = 10), slice_tail(., n = 10))},
+  geom_point(data = . %>% {bind_rows(slice_head(., n = 5), slice_tail(., n = 5))},
              color = "red", size = 2.5, alpha=0.5) +
   
   # Add the non-overlapping labels
   geom_text_repel(
-    data = . %>% {bind_rows(slice_head(., n = 10), slice_tail(., n = 10))},
+    data = . %>% {bind_rows(slice_head(., n = 5), slice_tail(., n = 5))},
     aes(label = gene),
     size = 5, 
     family = 'Arial',
@@ -277,23 +289,23 @@ ggplot(funGP.df %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   ) +
   # Labels and clean styling
   labs(
-    x = "",
+    x = "Rank",
     y = "Signed neglogp",
-    title = glue("funGP Rank Statistics")
+    title = glue("{data_env$CONTRAST}")
   ) +
   theme_classic(base_family = 'Arial') +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size=14),
     axis.title = element_text(size = 14),
     axis.text = element_text(size=14)
-  )
-
+  ))
+dev.off()
 
 #============================================================
 # volcano plot
-v_thresh <- 0.01
+v_thresh <- .05
 h_thresh <- -log(0.05)
-funGP.df %>% mutate(status = case_when(
+funGP_res %>% mutate(status = case_when(
   neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',
   neglogp > h_thresh & deviation < -v_thresh ~ 'Downreg',
   TRUE ~ 'Not Significant'
@@ -309,7 +321,7 @@ funGP.df %>% mutate(status = case_when(
     )
   ) + 
   geom_text_repel(
-    data = . %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 10), slice_tail(., n = 10))},
+    data = . %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 5), slice_tail(., n = 5))},
     aes(label = gene),
     size = 5, 
     family = 'Arial',

@@ -88,18 +88,18 @@ run_interval_evaluation <- function(N = 50, FIT_CONDITIONAL_NOISE = FALSE, SAVE_
       facet_wrap(~ bandwidth, labeller = label_both) + # Splits plots by bandwidth levels
       scale_fill_brewer(palette = "Set2") + # Professional color palette
       labs(
-        title = glue("{metric} across Amplitude and Bandwidth"),
+        # title = glue("{metric} across Amplitude and Bandwidth"),
         x     = "Amplitude",
         y     = metric, 
         fill  = "Amplitude"
       ) +
-      theme_bw(base_size = 16) + # Structured border theme for faceted plots
+      theme_bw(base_size = 10) + # Structured border theme for faceted plots
       theme(
         panel.grid      = element_blank(),
         legend.position    = "bottom"
       )
     
-    ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics_conditional_noise_{FIT_CONDITIONAL_NOISE}.pdf'), width = 8, height = 6)
+    ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics_conditional_noise.pdf'), width = 6, height = 4, units = 'in')
   }
   
 }

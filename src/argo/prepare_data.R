@@ -1,15 +1,8 @@
 #' prepare the brain aging data for fitting with ARGO
 
-library(tidyverse)
-library(anndata)
-library(glue)
-library(patchwork)
-library(ComplexHeatmap)
-library(ggrepel)
-
 CHECK_SPARSITY <- FALSE
 
-ad <- read_h5ad('~/Desktop/integrated_anndata.h5ad')
+ad <- anndata::read_h5ad('~/Desktop/integrated_anndata.h5ad')
 counts <- as.matrix(ad$layers['counts'])
 
 ## only keep the columns of interest
@@ -22,37 +15,11 @@ metadata <-  ad$obs %>% rownames_to_column('cell_id') %>%
 
 
 stopifnot('counts ordering does not match with metadata' = all(rownames(counts) == metadata$cell_id))
-#============================================================
-## find what resolution to fit data at by looking at gene expression sparsity levels
-#============================================================
 
-find_sparsity <- function(N, counts, metadata){
-  bins <- ntile(metadata$pseudotime, N)
-  slide_bin <- factor(paste(metadata$sample_id, bins, sep = '_'))
-  bin_cts <- rowsum(counts, group = slide_bin)
-  return(rowSums(bin_cts == 0))
-}
-
+#======================================
 if(CHECK_SPARSITY){
-  n_range <- seq(10,90,10)
-  sparsity <- lapply(n_range, find_sparsity, counts, metadata)
-  sapply(sparsity, function(x) sum(x > 0))
-  
-  par(mfrow = c(3,3))
-  for(i in seq_along(n_range)){
-    hist(sparsity[[i]],  xlab = 'number of sparse genes per bin', 
-         main = glue('Sparsity with {n_range[i]} isodepth bins'))
-  }
-  
-  sparsity_quantiles <- lapply(sparsity, function(x) quantile(x, c(.5, .75, .9, .99)))
-  
-  t <- as.matrix(do.call('rbind', sparsity_quantiles))
-  rownames(t) <- n_range
-  print(t)
+  source('src/R/check_sparsity.R')
 }
-
-
-
 
 #============================================================
 ## fitting data with 30 bins, I will marginalize over bins that have high sparsity
@@ -74,7 +41,6 @@ metadata <- metadata %>%
 
 # prepare the pseudobulk counts data
 bin_cts <- rowsum(as.matrix(counts), group = metadata$grid_key)
-
 #=============================
 # prepare bin level metadata
 #=============================
@@ -90,7 +56,6 @@ bin_meta <- bin_meta %>%
             dplyr::filter(sparsity < 3)
 
 bin_cts <- bin_cts[bin_meta$grid_key, ]
-
 #========================================================================
 ## build the full unobserved regular spatial grid (n_slides x N)
 #========================================================================
@@ -130,16 +95,17 @@ Z_donor <- model.matrix(~0 + bin_meta$donor_id)
 cov_donor <- tcrossprod(Z_donor)
 image(cov_donor)
 
-
 isodepth_ <- unique(bin_meta$coord_x)
 stopifnot('counts matrix is not aligned with metadata' = all(rownames(bin_cts) == bin_meta$grid_key))
-
 #============================================================
 # normalize and center the counts data
 #============================================================
 bin_cts <- scale(t(DESeq2::varianceStabilizingTransformation(t(bin_cts))), 
                  center = T, scale = F)
 
+#============================================================
+data_env <- read_rds('output/expression_data_env.rds')
+res.ARGO <- read_rds('output/old_vs_adult_N30_diff_testing_results.rds')
 #============================================================
 # create environment to pass these variables for fitting
 #============================================================
@@ -157,17 +123,21 @@ data_env$KERNEL = 'RBF'
 data_env$FIT_DONOR <- FALSE
 data_env$FIT_CONDITIONAL_NOISE <- TRUE
 data_env$LAMBDA <- 1 # regularization for noise terms in GP fits
-data_env$CONTRAST_VECTOR <- c(0, -1, 1)
-data_env$CONTRAST <- 'old_vs_adult'
+
+data_env$CONTRAST_VECTOR <- c(-1/2, 1, -1/2)
+data_env$CONTRAST <- 'adult_vs_other'
+
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
 data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
-# data_env$features_to_fit <- colnames(bin_cts)
-data_env$features_to_fit <- top_diff
+data_env$features_to_fit <- colnames(bin_cts)
 data_env$test_coords <- NULL
-data_env$kernel_params <- res.ARGO$params[top_diff, ]
+data_env$kernel_params <- res.ARGO$params
+data_env$PLOT_POSTERIOR <- FALSE
+data_env$PLOT_CONF_BANDS <- FALSE
+data_env$RETURN_FITS <- TRUE
 
-
+# write_rds(data_env, file = 'output/expression_data_env.rds')
 #============================================================
 ## read downstream functions
 #============================================================
@@ -180,9 +150,14 @@ source('src/R/compute_analytical_pvalue.R')
 source('src/R/derive_KLT_CI_bands.R')
 source('src/R/compute_exceedence_statistics.R')
 source('src/R/plot_conf_bands.R')
+source('src/R/compute_exceedence_metrics.R')
+
 
 res.ARGO <- fit_ARGO(data_env)
+write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_N30_diff_testing_results.rds'))
 
+
+#=====================================================
 funGP.df <- res.ARGO$resObjects %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
   mutate(across(c(neglogp, deviation), as.numeric)) %>% 
@@ -191,8 +166,6 @@ funGP.df <- res.ARGO$resObjects %>%
   ) %>%
   arrange(desc(neglogp)) %>%
   mutate(Rank = row_number())
-
-write_rds(res.ARGO, file = 'output/old_vs_adult_N30_diff_testing_results.rds')
 
 #============================================================
 ## make dotplots for the top differential genes

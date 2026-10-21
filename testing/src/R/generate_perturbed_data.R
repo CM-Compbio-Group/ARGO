@@ -74,7 +74,7 @@ generate_perturbed_data <- function(expt = 1, expt_df = tibble(), sce_fits = lis
   # check columns of expt_df
   
   message(glue('simulating counts for experiment {expt}'))
-  set.seed(148 + expt)
+  # set.seed(148 + expt)
   
   amplitude = expt_df$amplitude[expt]
   bandwidth = expt_df$bandwidth[expt]
@@ -193,6 +193,6 @@ generate_perturbed_data <- function(expt = 1, expt_df = tibble(), sce_fits = lis
                  effect_genes = effect_genes, 
                  null_genes = null_genes, 
                  effect_info = effect_info),
-            file = glue('testing/data/temp/{dataset}_expt_{expt}.rds'))
+            file = glue('testing/data/10_20/{dataset}_expt_{expt}.rds'))
   
 }

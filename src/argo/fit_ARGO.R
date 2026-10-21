@@ -21,6 +21,9 @@
 #' @param conf_level_alpha = 0.95
 #' @param n_monte_carlo_simulations = 1000 # no.of monte carlo samples
 #' @param kernel_params GP parameters for features to fit
+#' @param PLOT_POSTERIOR whether to plot posterior fits for genes
+#' @param PLOT_CONF_BANDS whether to plot confidence bands for genes
+#' @param RETURN_FITS whether to return fitted outputs
 #' 
 #' @returns list of fitted kernel parameters and ARGO differential testing outputs
 
@@ -34,7 +37,7 @@ fit_ARGO <- function(data_env){
   if(!is.double(N) && !(N %% 1 == 0)){
     stop('Type Error : N must be integer')
   }
-  if(N < 10 || N > 100){
+  if(N < 10 || N > 500){
     stop('Value Error : number of intervals not in valid range')
   }
   if(!is.numeric(counts)){
@@ -93,7 +96,7 @@ fit_ARGO <- function(data_env){
   if(!(is.null(test_coords) || is_double(test_coords))){
     stop('Type Error: test_coords must be either NULL or a numeric vector')
   }
-  if(!(is.numeric(kernel_params))){
+  if(!(is.null(kernel_params)) && !(is.numeric(kernel_params))){
     stop('Type Error : kernel params should be a numeric vector or matrix')
   }
   if(!(is.null(kernel_params)) && !(all(features_to_fit %in% rownames(kernel_params)))){
@@ -195,13 +198,14 @@ fit_ARGO <- function(data_env){
   }
     
   # visualize the posterior fits for genes
-  message('now plotting posterior fits')
-  posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
-  ggsave(wrap_plots(posteriors, ncol = 3) + 
-         plot_layout(guides = "collect"), 
-         filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
-         width=12,height=6)
-  
+  if(PLOT_POSTERIOR){
+    message('now plotting posterior fits')
+    posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
+    ggsave(wrap_plots(posteriors, ncol = 3) + 
+           plot_layout(guides = "collect"), 
+           filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
+           width=12,height=6)
+  }
   
   message('now running contrast tests')
   funGP_fits <- list()
@@ -211,19 +215,20 @@ fit_ARGO <- function(data_env){
   }
   
   
-  
-  message('now plotting confidence bands')
-  ci_plots <- list()
-  for(feature in data_env$features_to_fit){
-    ci_plots[[feature]] <- plot_CI_bands(feature, funGP_fits[[feature]], argo_env)
+  if(PLOT_CONF_BANDS){
+    message('now plotting confidence bands')
+    ci_plots <- list()
+    for(feature in data_env$features_to_fit){
+      ci_plots[[feature]] <- plot_CI_bands(feature, funGP_fits[[feature]], argo_env)
+    }
+    ggsave( wrap_plots(ci_plots, ncol = 3) + 
+              plot_layout(guides = "collect"), 
+            filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
+            width=10,height=5)
   }
-  ggsave( wrap_plots(ci_plots, ncol = 3) + 
-            plot_layout(guides = "collect"), 
-          filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
-          width=10,height=5)
   
   
-  if(is.null(data_env$kernel_params)){ # only return results if parameters are not known already
+  if(RETURN_FITS){ # only return results if parameters are not known already
     return(list(resObjects = funGP_fits,
                 params = argo_env$kernel_params)
     )  

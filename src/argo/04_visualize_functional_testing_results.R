@@ -12,14 +12,11 @@
 
 
 
-library(EnhancedVolcano)
-## visualize outputs of fungp tests
-source('src/R/plot_conf_bands.R')
-source('src/R/compute_exceedence_metrics.R')
-source('src/R/compute_exceedence_statistics.R')
 
-KERNEL <- 'RBF'
-CONTRAST <- 'old_vs_adult'
+## visualize outputs of fungp tests
+
+KERNEL <- data_env$KERNEL
+CONTRAST <- data_env$CONTRAST
 # funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_res.rds'))
 # load('data/temp/test_domain.rdata')
 
@@ -32,7 +29,7 @@ pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap.pdf'), width = 8, height = 8)
 binary_colors <- c("1" = "red3","0" = "lightgrey", "-1" = "navy")
 Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
         show_row_names = T,
-        row_names_gp = gpar(fontsize=2),
+        row_names_gp = gpar(fontsize=12),
         column_names_gp = gpar(fontsize=8),
         col = binary_colors,
         heatmap_legend_param = list(color_bar = "discrete")
@@ -40,7 +37,6 @@ Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
 dev.off()
 
 #----------------------------------------------------
-
 stat_lfc <- compute_stat_continuous(funGP_fits, N)
 pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap.pdf'), width = 8, height =8)
 Heatmap(stat_lfc, cluster_columns = F, name = 'FC \nstatistic',
@@ -57,11 +53,13 @@ exc.metrics <- do.call('rbind', lapply(funGP_fits, compute_exceedence_metrics, i
 ## aggregate results from functional testing
 funGP_res <- funGP_fits %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
-  bind_cols(exc.metrics) %>%
+  # bind_cols(exc.metrics) %>%
   mutate(across(c(neglogp, deviation), as.numeric)) %>% 
-  mutate(stats = neglogp * sign(deviation), 
-         net_auec = auec_up - auec_down,
-         net_poe = poe_up - poe_down) %>%
+  mutate(stats = neglogp * sign(deviation) 
+         # net_auec = auec_up - auec_down,
+         # net_poe = poe_up - poe_down
+         ) %>%
+  mutate(fdr = p.adjust(exp(-neglogp), method = 'BH')) %>%
   arrange(desc(neglogp)) %>% 
   mutate(Rank = row_number()) 
 
@@ -107,10 +105,9 @@ summary_stats <- map_dfr(thresh, function(t) {
 
 summary_stats
 
-funGP_res <- funGP_res %>% mutate(fdr = p.adjust(exp(-neglogp), method = 'BH'))
 ## save to file
 write_csv(funGP_res, file = glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
-funGP_res <- read_csv(glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
+# funGP_res <- read_csv(glue('data/processed/{KERNEL}_{CONTRAST}_funGP_testing.csv'))
 #--------------------------------
 ## rank cell types by their statistic
 #--------------------------------
@@ -183,7 +180,7 @@ ggplot(aes(x = deviation, y = neglogp)) +
     max.overlaps = 20
   ) +
   # 2. Horizontal significance threshold line: -log10(0.05) ~ 1.301
-  geom_hline(yintercept = h_thresh, color = "red", linetype = "dashed", size = .75) +
+  geom_hline(yintercept = h_thresh, color = "red", linetype = "dashed", linewidth = .75) +
   # 3. Vertical effect size threshold lines
   geom_vline(xintercept = c(-v_thresh, v_thresh), color = "red", linetype = "dashed", size = .75) +
   # 4. Axis Labels
@@ -204,8 +201,6 @@ ggplot(aes(x = deviation, y = neglogp)) +
     color = guide_legend(override.aes = list(size = 5, alpha = 1))
   )
 dev.off()
-
-
 
 #-------------------------------------
 ## visualize conf bands for significant genes
