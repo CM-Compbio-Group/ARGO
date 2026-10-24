@@ -36,7 +36,7 @@ computeNegLogLikelihoodGradient <- function(par, argo_env){
     K <- kronecker(B, K_kernel) + kronecker(Sigma, diag(N)) 
     # project to observed data
     K_obs <- projection %*% tcrossprod(K, projection) + 
-             sigma_d^2 * donor_identity + 
+             sigma_d^2 * cov_donor + 
              1e-6 * diag(length(feature_vec))
     
     ## compute terms for gradient
@@ -57,7 +57,7 @@ computeNegLogLikelihoodGradient <- function(par, argo_env){
     gradients[2] <- -0.5 * sum(P_full*t(kronecker(B, dKsf)))
     
     ## gradient wrt sigma_d term
-    gradients[3] <- ifelse(FIT_DONOR, -sigma_d * sum(P * donor_identity), 0)
+    gradients[3] <- ifelse(FIT_DONOR, -sigma_d * sum(P * cov_donor), 0)
     
     ## gradient wrt sigma_n terms
     diag_P_full <- diag(P_full)
@@ -104,7 +104,7 @@ computeNegLogLikelihood <- function(par, argo_env){
     
     ## project to observed data
     K <- projection %*% tcrossprod(K, projection) + 
-      sigma_d^2 * donor_identity +  
+      sigma_d^2 * cov_donor +  
       1e-6 * diag(length(feature_vec))
     
     ## supporting constants

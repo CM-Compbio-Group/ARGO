@@ -79,6 +79,7 @@ run_interval_evaluation <- function(N = 50, FIT_CONDITIONAL_NOISE = FALSE, SAVE_
   }
   
   effect_info <- right_join(effect_info, bind_rows(eval.metrics) %>% mutate(gene = effect_info$gene))
+  write_rds(effect_info, file = 'testing/output/interval_effect_info.rds')
   # effect_info[names(eval.metrics[[1]])] <- bind_rows(eval.metrics)
   
   for(metric in names(eval.metrics[[1]])){
@@ -99,7 +100,7 @@ run_interval_evaluation <- function(N = 50, FIT_CONDITIONAL_NOISE = FALSE, SAVE_
         legend.position    = "bottom"
       )
     
-    ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics_conditional_noise.pdf'), width = 6, height = 4, units = 'in')
+    ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics.pdf'), width = 6, height = 4, units = 'in')
   }
   
 }

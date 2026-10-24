@@ -79,8 +79,12 @@ if(GENERATE_INTERVAL_BENCHMARK){
 }
 
 if(RUN_INTERVAL_BENCHMARK){
-  run_interval_evaluation(dataset, N = 50)  
+  run_interval_evaluation( N = 25, dataset = dataset)  
 }
+effect_info <- read_rds('testing/output/interval_effect_info.rds')
+
+## find mean eval metric by parameter combination
+effect_info %>% group_by(amplitude, bandwidth) %>% summarise(mean(jaccard_index, na.rm = T))
 
 
 if(PLOT_RESULTS){

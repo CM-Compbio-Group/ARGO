@@ -109,7 +109,7 @@ gt.sziraki <- read_xlsx('data/sheets/Sziraki.xlsx', sheet = 9, skip = 1)
 gt.sziraki <- na.omit(unique(gt.sziraki$`Gene name`))
 
 dataset <- list(
-                'Hahn et al' = gt.hahn,
+                # 'Hahn et al' = gt.hahn,
                 'Jin et al' = gt.jin,
                 'Ximerakis et al' = gt.ximerakis,
                 'Sziraki et al' = gt.sziraki
@@ -175,17 +175,26 @@ for(study in names(dataset)){
     }
   )
   
-  cols <- c( "#bebada", "#8dd3c7", 'lightskyblue2', 'lightgreen', 'lightpink2', 'lightsalmon', 'orchid2')
+  cols <- c(  "orchid4","#bebada", "#8dd3c7", 'lightskyblue2', 'lightgreen', 'lightpink2', 'lightsalmon')
   
-  pdf(glue('figs/{STATISTIC}_{study}.pdf'), width = 6, height = 6)
-  par(mfrow = c(1,1), mar = c(8, 6, 4, 2) + 0.1, family = 'Arial', ps=16)
+  pdf(glue('figs/{STATISTIC}_{study}_lines.pdf'), width = 4, height = 4)
+  par(mfrow = c(1,1), 
+      mar = c(3.5, 3.5, 2, 1) + 0.1, 
+      mgp = c(1.2, 0.4, 0),
+      family = 'Arial', ps=8)
   plot(pr.curves[['ARGO']], col = adjustcolor(cols[1], alpha.f = 1), 
-       main = glue("{study} \n Precision-Recall Curve"), 
-       auc.main = F, lty=2)
+       main = glue("{study}"), 
+       auc.main = F, 
+       lty=1, lwd = 2.5,
+       cex.main = 1.25,  # 8pt Title
+       cex.lab  = 1,  # 8pt Axis Labels ("Recall", "Precision")
+       cex.axis = 1)
+  
   ## plot other curves
-  for(ii in seq(1,2)){
+  for(ii in seq(1,5)){
     method = names(pr.curves)[ii]
-    plot(pr.curves[[method]], col = adjustcolor(cols[ii + 1], alpha.f = .5), lty = 2, lwd = 2, add = TRUE)
+    plot(pr.curves[[method]], col = adjustcolor(cols[ii + 1], alpha.f = .5),
+         lty = 1, lwd = 1, add = TRUE)
   }
   # make legends
   if(STATISTIC == 'PR'){
@@ -207,10 +216,12 @@ for(study in names(dataset)){
     
     
   }
-  legend("topright", cex=.8,
-         legend = lgx,
+  legend("topright", 
+         cex=1,
+         legend = lgx, 
+         text.font = 1,
          col = cols, 
-         lty = 2,
+         lty = c(1, rep(1,5)),
          lwd = 2,             # Line width
          bty = "n")           # Removes the box border around the legend (optional)
   

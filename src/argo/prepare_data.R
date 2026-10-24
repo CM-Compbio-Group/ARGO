@@ -117,7 +117,7 @@ data_env$N <- N
 data_env$projection <- projection_matrix
 data_env$W <- W
 data_env$B <- B
-data_env$donor_identity <- cov_donor
+data_env$cov_donor <- cov_donor
 data_env$noise_diag <- noise_diag
 data_env$KERNEL = 'RBF'
 data_env$FIT_DONOR <- FALSE

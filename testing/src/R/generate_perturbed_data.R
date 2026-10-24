@@ -19,7 +19,7 @@ generate_perturbed_data <- function(expt = 1, expt_df = tibble(), sce_fits = lis
   #' script is hard coded for simulating only 2 conditions
   
   
-  if(!(is.double(expt)) ||  !(expt %% 1 == 0)){
+  if(!(is.integer(expt)) && (!(is.numeric(expt)) ||  !(expt %% 1 == 0))){
     stop('Type Error : expt must be integer')
   }
   

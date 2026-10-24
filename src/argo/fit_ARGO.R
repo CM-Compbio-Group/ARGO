@@ -201,10 +201,10 @@ fit_ARGO <- function(data_env){
   if(PLOT_POSTERIOR){
     message('now plotting posterior fits')
     posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
-    ggsave(wrap_plots(posteriors, ncol = 3) + 
+    ggsave(wrap_plots(posteriors, ncol = 2) + 
            plot_layout(guides = "collect"), 
            filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
-           width=12,height=6)
+           width=4,height=3)
   }
   
   message('now running contrast tests')
@@ -221,10 +221,10 @@ fit_ARGO <- function(data_env){
     for(feature in data_env$features_to_fit){
       ci_plots[[feature]] <- plot_CI_bands(feature, funGP_fits[[feature]], argo_env)
     }
-    ggsave( wrap_plots(ci_plots, ncol = 3) + 
+    ggsave( wrap_plots(ci_plots, ncol = 2) + 
               plot_layout(guides = "collect"), 
             filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
-            width=10,height=5)
+            width=4,height=3)
   }
   
   

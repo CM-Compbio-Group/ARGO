@@ -25,13 +25,14 @@ expt_df <- crossing(amplitude = perturb_amplitude,
                     iter = factor(paste('iter', seq(N_EXPERIMENTS), sep = '-'))) %>% 
   mutate(Experiment = row_number())
 
+print(glue('Size of the simulation grid is {nrow(expt_df)}'))
 write_csv(expt_df, file = 'testing/data/10_20/experiment_params.csv')
 
-message(glue("Fitting scDesign3 parameters for {dataset} dataset"))
-sce <- read_rds(glue('testing/data/raw/{dataset}_sce.rds'))
-print(sce) ## 1000 genes, 2087 cells
-sce_fits <- fit_scDesign3(sce) # learn mean and variance parameters for all genes
-write_rds(sce_fits, glue('testing/output/{dataset}_sce_fits.rds'))
+# message(glue("Fitting scDesign3 parameters for {dataset} dataset"))
+# sce <- read_rds(glue('testing/data/raw/{dataset}_sce.rds'))
+# print(sce) ## 1000 genes, 2087 cells
+# sce_fits <- fit_scDesign3(sce) # learn mean and variance parameters for all genes
+# write_rds(sce_fits, glue('testing/output/{dataset}_sce_fits.rds'))
 
 
 
@@ -41,7 +42,7 @@ MASTER_SEED <- 148
 N_SAMPLES = 3 # number of randomly sampled replicates for each condition 
 N_GENES = 500 # number of genes to use
 perturb_frac = 0.2 # fraction of genes that must have perturbations
-# sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
+sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
 
 set.seed(MASTER_SEED)
 ## generate the datasets in parallel 

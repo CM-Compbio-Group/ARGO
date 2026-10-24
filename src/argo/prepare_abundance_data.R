@@ -1,8 +1,8 @@
 #' prepare cell type abundance data for modeling
+source('src/argo/00-load-packages.R')
+CHECK_SPARSITY <- FALSE
 
-CHECK_SPARSITY <- TRUE
-
-ad <- read_h5ad('~/Desktop/integrated_anndata.h5ad')
+ad <- anndata::read_h5ad('~/Desktop/integrated_anndata.h5ad')
 
 ## only keep the columns of interest
 obs <-  ad$obs %>% rownames_to_column('cell_id') %>% 
@@ -158,42 +158,17 @@ stopifnot('counts matrix is not aligned with metadata' = all(rownames(prop) == b
 #============================================================
 # center the abundance ata
 #============================================================
-prop <- scale(prop, center = T, scale = F)
+prop <- scale(prop, center = T, scale = T)
 pheatmap(prop)
 
 plot(prop[, 'Olig-1']~ bin_meta$condition_key)
 plot(prop[, 'Olig-2']~ bin_meta$condition_key)
 plot(prop[, 'Olig-3']~ bin_meta$condition_key)
+plot(prop[, 'Endo-1']~ bin_meta$condition_key)
+plot(prop[, 'Endo-3']~ bin_meta$condition_key)
+plot(prop[, 'Micro-3']~ bin_meta$condition_key)
 
 #============================================================
-mean_abx <- rowsum(prop, bin_meta$condition_key) %>% as.data.frame() %>% rownames_to_column('condition_key') 
-mean_abx <- pivot_longer(mean_abx, cols = -condition_key, 
-                         names_to = 'cell_type', 
-                         values_to = 'proportion') %>% 
-  left_join(bin_meta %>% select(condition, coord_x, condition_key),
-            by = 'condition_key', multiple = 'first')
-
-                      
-pal43 <- colorRampPalette(brewer.pal(11, "Set3"))(43)
-p <- ggplot(mean_abx, aes(x = coord_x, 
-                          y = proportion,  # Or n_cells
-                          color = cell_type, 
-                          group = cell_type)) +
-  geom_line(linewidth = .5, alpha = 0.75, linetype=1) +
-  # geom_point(size = 1.25, alpha = .75) +
-  facet_wrap(~ interaction(condition),  # Or facet_wrap(~ age + batch)
-             scales = "free_y", ncol=1) +
-  # scale_y_continuous(labels = scales::percent) +  # If proportions
-  labs(title = "Mean Cell Type Proportions vs. Isodepth Bins by Age",
-       x = "Binned Isodepth", y = "Centered Proportion of Cells",
-       color = "Cell Type") +
-  scale_color_manual(values = pal43) +
-  theme_classic() +
-  guides(color = guide_legend(ncol = 12)) +  # Set number of columns
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.position = "bottom")
-
-print(p)
 
 #============================================================
 # create environment to pass these variables for fitting
@@ -206,15 +181,15 @@ data_env$N <- N
 data_env$projection <- projection_matrix
 data_env$W <- W
 data_env$B <- B
-data_env$donor_identity <- cov_donor
+data_env$cov_donor <- cov_donor
 data_env$noise_diag <- noise_diag
 data_env$KERNEL = 'RBF'
 data_env$FIT_DONOR <- FALSE
 data_env$FIT_CONDITIONAL_NOISE <- TRUE
 data_env$LAMBDA <- 1 # regularization for noise terms in GP fits
 
-data_env$CONTRAST_VECTOR <- c(0, -1, 1)
-data_env$CONTRAST <- 'old_vs_adult'
+data_env$CONTRAST_VECTOR <- c(-1, 1, 0)
+data_env$CONTRAST <- 'adult_vs_juvenile'
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
 data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
@@ -240,15 +215,16 @@ source('src/R/generate_cc_matrix.R')
 source('src/R/compute_analytical_pvalue.R')
 source('src/R/derive_KLT_CI_bands.R')
 source('src/R/compute_exceedence_statistics.R')
+source('src/R/compute_exceedence_metrics.R')
 source('src/R/plot_conf_bands.R')
 
 res.ARGO <- fit_ARGO(data_env)
-write_rds(res.ARGO, file = 'output/old_vs_adult_N30_diff_abundance_results.rds')
+write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_diff_abundance_results.rds'))
 #============================================================
 ## visualize results
 #============================================================
-data_env$CONTRAST <- 'adult_vs_juvenile'
-res.ARGO <- read_rds(glue('output/{data_env$CONTRAST}_N30_diff_abundance_results.rds'))
+data_env$CONTRAST <- 'old_vs_adult'
+res.ARGO <- read_rds(glue('output/{data_env$CONTRAST}_diff_abundance_results.rds'))
 ## compute exceedence metrics
 exc.metrics <- do.call('rbind', lapply(res.ARGO$resObjects, compute_exceedence_metrics, isodepth_))
 ## aggregate results from functional testing
@@ -303,7 +279,7 @@ dev.off()
 
 #============================================================
 # volcano plot
-v_thresh <- .05
+v_thresh <- 1
 h_thresh <- -log(0.05)
 funGP_res %>% mutate(status = case_when(
   neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',

@@ -1,6 +1,8 @@
 ## return posterior predictive plots for the genes given the parameter fits
 posterior_predictive_plots <- function(feature, argo_env){
   argo_env$.feature <- feature
+  
+  
   with(argo_env, {
     # browser()
     feature_vec <- counts[, .feature]
@@ -10,7 +12,7 @@ posterior_predictive_plots <- function(feature, argo_env){
     sigma_d = ifelse(FIT_DONOR, params[3], 0)
     sigma_n = params[4:length(params)]
     
-    n_slides <- length(levels(bin_meta$sample_id))
+    n_slides <- length(levels(metadata$sample_id))
     Sigma <- diag(sigma_n[noise_diag] ^ 2)
     
     ## compute covariance kernel
@@ -83,17 +85,18 @@ posterior_predictive_plots <- function(feature, argo_env){
     
     ## filter to only time points of interest
     ## subsetting after i have the posterior fits
-    # if(FILTER){
-    #   gp_df <- filter(gp_df, condition %in% c('24wk', '90wk'))
-    #   metadata <- filter(metadata, condition %in% c('24wk', '90wk'))
-    # }
+    plot_meta <- bind_cols(metadata, feature = feature_vec)
+    
+    gp_df <- filter(gp_df, condition %in% c('24wk', '90wk'))
+    plot_meta <- filter(plot_meta, condition %in% c('24wk', '90wk'))
+
     
     # 2. Compute the mean trajectory across slides within each condition group
     gp_mean_df <- gp_df %>%
       group_by(condition, coord_x) %>%
       summarize(y_gp = mean(y_gp), .groups = "drop")
     
-    plot_meta <- bind_cols(metadata, feature = feature_vec)
+    
     # 3. Plot the clean mean curve
     p <- ggplot(data = plot_meta, 
                 aes(x = coord_x, y = feature, color = donor_id)) +
@@ -101,8 +104,8 @@ posterior_predictive_plots <- function(feature, argo_env){
         width = 0.015,
         height = 0,
         shape = 16,
-        alpha = 0.5,
-        size = 1.5
+        alpha = 0.35,
+        size = .75
       ) 
     
     ## posterior fits for each donor
@@ -119,7 +122,7 @@ posterior_predictive_plots <- function(feature, argo_env){
       geom_line(
         data = gp_mean_df,
         aes(x = coord_x, y = y_gp, group = condition),
-        color = 'red', linewidth = 0.75, alpha = .85,
+        color = 'red', linewidth = 0.5, alpha = .75,
         inherit.aes=F
       ) + 
       facet_wrap(~ condition) +
@@ -127,13 +130,30 @@ posterior_predictive_plots <- function(feature, argo_env){
       labs(x = 'Isodepth', y = .feature, color = "Donor") +
       scale_x_continuous(breaks = c(0, 0.5, 1.0), 
                          labels = c("0.0", "0.5", "1.0")) + 
-      theme_classic(base_size = 12) +
+      theme_bw(base_size = 8, 
+                    base_family = "Arial") +
       theme(
-        axis.title.y = element_text(size = 16),
-        panel.grid = element_blank(),
-        strip.text = element_text(size = 16, face = "bold"),
-        axis.text = element_text(color = "black"),
-        legend.title = element_text(size = 16)
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), # remove grid lines
+        
+        legend.box.spacing = unit(1, "mm"),           # Drastically reduces space between plot border and legend
+        legend.margin = margin(l = -3, r = 0, t = 0, b = 0, unit = "pt"), # Pulls the legend closer to the left
+        legend.key.size = unit(3, "mm"), # Optional: compacts color keys vertically too
+        
+        # 2. UNIFORM 8 PT PLAIN FONTS EVERYWHERE
+        text = element_text(size = 8, face = "plain"),
+        plot.title = element_text(size = 8, face = "plain", hjust = 0.5),
+        axis.title = element_text(size = 8, face = "plain"),
+        axis.text = element_text(size = 6, face = "plain"),
+        
+        # Facet labels (e.g., "24wk", "90wk", and the gene names on the side)
+        strip.text = element_text(size = 8, face = "plain"), 
+        # strip.background = element_blank(),           # Optional: Cleans up facet header boxes
+        
+        # Legend text and title formatting
+        legend.title = element_text(size = 8, face = "plain"),
+        legend.text = element_text(size = 8, face = "plain")
+        
       )
 
     return(p)

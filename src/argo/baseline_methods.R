@@ -70,7 +70,7 @@ funGP.df <- res.ARGO$resObjects %>%
 
 res.list[['ARGO']] <- funGP.df
 
-write_rds(res.list, file = glue('output/{KERNEL}_{CONTRAST}_DGE_results.rds'))
+write_rds(res.list, file = glue('output/{CONTRAST}_DGE_results_list.rds'))
 #===============================================================
 ## benchmarking
 #===============================================================
