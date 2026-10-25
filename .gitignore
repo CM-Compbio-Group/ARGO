@@ -1,0 +1,21 @@
+# ignore all image files
+*.pdf
+*.png
+
+# ignore these directories
+data/
+references/
+.venv/
+__pycache__/
+figs/
+
+output/
+testing/output/
+testing/data/temp/
+
+
+.Rhistory
+.Rproj.user
+
+renv/library/
+
