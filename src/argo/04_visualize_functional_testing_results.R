@@ -15,6 +15,8 @@
 
 ## visualize outputs of fungp tests
 
+list2env(as.list(data_env), envir = globalenv())
+
 KERNEL <- data_env$KERNEL
 CONTRAST <- data_env$CONTRAST
 # funGP_fits <- read_rds(glue('output/{KERNEL}_funGP_testing_{CONTRAST}_res.rds'))
@@ -62,17 +64,17 @@ dev.off()
 #-------------------------------------
 ## compute exceedence metrics
 # x_test <- isodepth_
-exc.metrics <- do.call('rbind', lapply(funGP_fits, compute_exceedence_metrics, isodepth_))
+exc.metrics <- do.call('rbind', lapply(res.ARGO$resObjects, compute_exceedence_metrics, isodepth_))
 
 ## aggregate results from functional testing
-funGP_res <- funGP_fits %>%
+funGP_res <- res.ARGO$resObjects %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
   bind_cols(exc.metrics) %>%
   mutate(across(c(neglogp, deviation), as.numeric)) %>% 
   mutate(stats = neglogp * sign(deviation), 
          net_auec = auec_up - auec_down,
          net_poe = poe_up - poe_down
-         ) %>%
+  ) %>%
   mutate(fdr = p.adjust(exp(-neglogp), method = 'BH')) %>%
   arrange(desc(neglogp)) %>% 
   mutate(Rank = row_number()) 

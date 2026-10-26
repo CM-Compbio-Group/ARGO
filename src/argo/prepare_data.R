@@ -1,4 +1,5 @@
 #' prepare the brain aging data for fitting with ARGO
+source('src/argo/00-load-packages.R')
 
 CHECK_SPARSITY <- FALSE
 
@@ -149,8 +150,8 @@ source('src/R/generate_cc_matrix.R')
 source('src/R/compute_analytical_pvalue.R')
 source('src/R/derive_KLT_CI_bands.R')
 source('src/R/compute_exceedence_statistics.R')
-source('src/R/plot_conf_bands.R')
 source('src/R/compute_exceedence_metrics.R')
+source('src/R/plot_conf_bands.R')
 
 
 res.ARGO <- fit_ARGO(data_env)

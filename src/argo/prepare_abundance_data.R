@@ -204,6 +204,7 @@ data_env$kernel_params <- res.ARGO$params # if my parameters are already fit, I 
 write_rds(data_env, file = 'output/abundance_data_env.rds')
 #============================================================
 data_env <- read_rds('output/abundance_data_env.rds')
+list2env(as.list(data_env), envir = globalenv())
 #============================================================
 ## source implementation modules
 #============================================================
