@@ -85,8 +85,9 @@ plot_roi_split <- function(object, gene, ROI, metadata) {
     # Layer 1: Outside ROI (Background grayscale)
     geom_point(
       data = df_outside, 
-      aes(x = x, y = y, color = Expression,alpha = Expression > 0), 
-      size = 0.35,
+      aes(x = x, y = y, color = Expression,
+          size = Expression > 0,
+          alpha = Expression > 0), 
       shape = 16,  # Use a borderless circle
       stroke = 0   # Force border thickness to zero
     ) +
@@ -104,6 +105,10 @@ plot_roi_split <- function(object, gene, ROI, metadata) {
         order = 2
       )
     ) + 
+    scale_size_manual(
+      values = c('FALSE' = 0.25, 'TRUE' = 1),
+      guide = "none"
+    ) + 
     scale_alpha_manual(
       values = c("FALSE" = 0.15, "TRUE" = 0.5), 
       guide = "none"
@@ -115,8 +120,9 @@ plot_roi_split <- function(object, gene, ROI, metadata) {
     # Layer 2: Inside ROI (RdPu palette + low alpha for zeros)
     geom_point(
       data = df_inside, 
-      aes(x = x, y = y, color = Expression, alpha = Expression > 0), 
-      size = 0.6,
+      aes(x = x, y = y, color = Expression, 
+          alpha = Expression > 0, 
+          size=Expression > 0), 
       shape = 16,  # Use a borderless circle
       stroke = 0   # Force border thickness to zero
     ) +
@@ -134,6 +140,10 @@ plot_roi_split <- function(object, gene, ROI, metadata) {
         order = 1
       )
     ) +
+    scale_size_manual(
+      values = c('FALSE' = 0.25, 'TRUE' = 1.5),
+      guide = "none"
+    ) + 
     scale_alpha_manual(
       values = c("FALSE" = 0.15, "TRUE" = 0.5), 
       guide = "none"

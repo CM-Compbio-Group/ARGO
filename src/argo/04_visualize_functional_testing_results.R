@@ -207,8 +207,8 @@ par(mfrow=c(1,1))
 thresh <- c(.25, .5, .75, 1)
 summary_stats <- map_dfr(thresh, function(t) {
   # message(t)
-  funGP_res %>% filter(neglogp > -log(.01) & abs(deviation) > t) %>%
-    summarise(auec_threshold = t, 
+  funGP_res %>% filter(fdr < 0.05 & abs(deviation) > t) %>%
+    summarise(LFC_threshold = t, 
               upregulated = sum(net_auec > 0),
               downregulated = sum(net_auec < 0),
               total = n())

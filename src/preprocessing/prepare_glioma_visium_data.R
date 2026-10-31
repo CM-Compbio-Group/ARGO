@@ -6,42 +6,28 @@
 #' filter out bins with very few spots -- thresholding at 100 spots here.
 #' define the projection and donor_covariance matrices.
 #' scale abundance data before fitting. 
+#' # I am running diff tests b/w conditions; pooling across all slides per condition
+# have no use for condition_key here -- all information is summarized at level of condition_key
+# coords per bin per condition; counts per bin per condition
 
 source('src/argo/00-load-packages.R')
+# source('src/R/bin_kdtree_adaptive.R')
 library(Seurat)
 library(RColorBrewer)
-
+set.seed(42)
 
 brain <- read_rds('~/Desktop/brain-seurat-objects/visium.rds')
-source('src/R/bin_kdtree_adaptive.R')
-
 ivy <- levels(brain$ivy_niche)
-
-# xx <- brain@meta.data %>% dplyr::select(all_of(ivy))
-## clamp the enrichment scores at zero
-# xx <- pmax(as.matrix(brain@meta.data %>% dplyr::select(all_of(ivy))), 0)
-
 ## convert to relative scores for spots
 raw_scores <- as.matrix(brain@meta.data[, ivy])
 # Temperature tau = 0.15 controls sharpness toward the 4 vertices
 beta <- 0.05
 scores_softplus <- scale(beta * log1p(exp(raw_scores/beta)))
+## bin with k-means voronoi cells 
+km <- kmeans(scores_softplus, centers = 100, nstart = 25)
+brain$bins <- factor(km$cluster)
 
-par(mfrow = c(2, 2))
-for (col in colnames(scores_softplus)) {
-  boxplot(scores_softplus[, col] ~ brain$ivy_niche, 
-          main = paste(col, "(Softplus)"),
-          xlab = "Assigned Niche",
-          ylab = col,
-          outline = FALSE)
-}
-
-par(mfrow = c(1,1))
-
-## bin the data 
-brain$bins <- bin_kdtree_adaptive(scores_softplus, target_spot_count = 1000)
-(N <- length(levels(brain$bins)))
-
+#============================================================
 df <- scores_softplus %>% 
   bind_cols(brain@meta.data %>% dplyr::select(
                                         ivy_niche, 
@@ -49,57 +35,66 @@ df <- scores_softplus %>%
                                         condition = subtype, 
                                         sample_id = orig.ident,
                                         bin = bins))  %>% 
-                         mutate(grid_key = paste(sample_id, bin, sep = '___'), 
-                                condition_key = paste(condition, bin, sep = '___'),
-                                condition = factor(condition)) %>%
+                         mutate(condition = factor(condition)) %>%
                          mutate(sample_id = factor(sample_id, 
                                             levels = gtools::mixedsort(unique(sample_id))),
-                                bin = factor(bin, levels = sort(unique(bin))), 
-                                grid_key = factor(grid_key, 
-                                            levels = gtools::mixedsort(unique(grid_key))),
-                                condition_key = factor(condition_key, 
-                                                  levels = gtools::mixedsort(unique(condition_key)))) %>%
-  arrange(grid_key)  %>% 
-  rownames_to_column('spot_id') %>% 
-  as_tibble()
-                        
+                                bin = factor(bin, levels = sort(unique(bin)))) %>%
+                        rownames_to_column('spot_id') %>% 
+                        as_tibble()
 
-bin_cols <- colorRampPalette(brewer.pal(9, "Set3"))(N)
-plotly::plot_ly(data = df, 
-                x = ~CT, 
-                y = ~CTpan, 
-                z = ~LE, 
-                color = ~condition_key, 
-                colors = bin_cols,
-                type = "scatter3d", 
-                marker = list(size = 2.5, alpha=.5),
-                mode = "markers")
-
-
-## filter out bins that are extremely skewed b/w conditions
-bin_tab <- table(df$bin, df$condition)
-prop_bins <- bin_tab[, "GBM"] / rowSums(bin_tab)
-
-# filter out bins with extreme skew b/w conditions
-# keep_bins <- which((prop_bins > .05) & (prop_bins < .95))
-# df <- filter(df, bin %in% keep_bins)
-# df$bin <- droplevels(df$bin)
-# (N <- length(levels(df$bin)))
+levels(df$condition) # "GBM"       "IDHmutant"
 #============================================================
-## prepare environment for running argo
+## prepare abundance data
 #============================================================
-# I am running diff tests b/w conditions; pooling across all slides per condition
-# have no use for grid_key here -- all information is summarized at level of condition_key
-# coords per bin per condition; counts per bin per condition
+## account for relative abundance of WT and mutant spots
+cond_weights <- df %>%
+  dplyr::count(condition, name = "total_cond_spots") %>%
+  mutate(cond_weight = total_cond_spots / sum(total_cond_spots))
+
+# Total spots in each bin across BOTH conditions combined
+bin_totals <- df %>%
+  dplyr::count(bin, name = "total_bin_spots")
+
+View(df %>% dplyr::count(condition, MP, name = 'n_cells'))
+
+# define proportions relative to total number of cells in each bin; across all cell types. 
+# number of cells from each condition in this bin
 counts <- df %>%
-  dplyr::count(condition_key, 
-              MP, name = 'n_cells') %>% 
-  group_by(condition_key) %>%
-  mutate(total_cells = sum(n_cells),
-         proportion = n_cells / total_cells) %>%
-  ungroup()
+  dplyr::count(condition, bin, MP, name = 'n_cells') %>%
+  tidyr::complete(condition, bin, MP, fill = list(n_cells = 0)) %>%
+  # 1. Local spot count of condition c in bin b (N_{c,b})
+  group_by(condition, bin) %>%
+  mutate(
+    condition_key = paste(condition, bin, sep = '___'),
+    N_cb = sum(n_cells)
+  ) %>%
+  ungroup() %>%
+  # 2. Global spot count of condition c (N_c)
+  group_by(condition) %>%
+  mutate(
+    N_c = sum(n_cells),
+    state_purity = n_cells / pmax(N_cb, 1),
+    cond_bin_density = N_cb / N_c
+  ) %>%
+  ungroup() %>%
+  # 3. Total local density in bin b across both conditions: (N_{GBM,b}/N_GBM + N_{IDH,b}/N_IDH)
+  group_by(bin) %>%
+  mutate(
+    # Divide by 17 (n_distinct(MP)) because cond_bin_density is repeated across the MP rows
+    total_local_bin_density = sum(cond_bin_density) / n_distinct(MP),
+    local_niche_share = cond_bin_density / total_local_bin_density,
+    # Final local proportion in [0, 1] that sums to 1 inside every bin b
+    proportion = state_purity * local_niche_share
+  ) %>%
+  ungroup() %>%
+  mutate(
+    condition_key = factor(condition_key, levels = gtools::mixedsort(unique(condition_key)))
+  )
 
-prop <- counts %>% select(condition_key, MP, proportion) %>%
+# need to filter out spots with low counts per condition -- proportions are not valid; 
+# or compute proportion by bin, not by conditino_key
+prop <- counts %>% 
+  select(condition_key, MP, proportion) %>%
   arrange(condition_key) %>% 
   pivot_wider(
     names_from = MP,           # Cell types → column names
@@ -110,115 +105,100 @@ prop <- counts %>% select(condition_key, MP, proportion) %>%
   column_to_rownames('condition_key') %>%
   as.matrix()
 
-# pheatmap(prop, cluster_rows = T)
-
-# each bin has a coordinate in space
+#============================================================
+# build aligned bin metadata
 coords <- df %>% 
   group_by(bin) %>% 
   summarise(across(all_of(ivy), \(x) mean(x, na.rm = T)))
 
-coords
+bin_meta <- counts %>% distinct(condition, bin, condition_key) %>% 
+  left_join(coords, by = 'bin') %>%
+  mutate(sample_id = condition, 
+         grid_key = condition_key) %>%
+  arrange(grid_key)
 
-bin_meta <- left_join(left_join(coords, df %>% 
-  distinct(condition, bin, condition_key), 
-  by = 'bin'), counts %>% distinct(condition_key, total_cells), 
-  by = 'condition_key') %>% arrange(condition_key)
+#============================================================
+stopifnot('binned counts does not match with metadata' = all(rownames(prop) == bin_meta$grid_key))
+#============================================================
+# Verify means across all bins:
+tapply(prop[, 'cMESHyp'], bin_meta$condition, mean)
+tapply(prop[, 'Vasc'],    bin_meta$condition, mean)
+tapply(prop[, 'cOXPHOS'], bin_meta$condition, mean)
+#============================================================
+prop_centered <- scale(prop, center = TRUE, scale = TRUE)
+#============================================================
+par(mfrow =c(2,2))
+boxplot(prop_centered[, 'cOXPHOS']~ bin_meta$condition, main = 'cOxphos')
+boxplot(prop_centered[, 'cMESHyp']~ bin_meta$condition, main = 'cMesHyp')
+boxplot(prop_centered[, 'Vasc']~ bin_meta$condition, main = 'Vasc')
+boxplot(prop_centered[, 'cMESInf']~ bin_meta$condition, main = 'cMesInf')
+#============================================================
+# filter at the bin level
+# Require a bin to have sufficient spots in BOTH conditions (or relax threshold for the minor condition)
+# valid_bins <- counts %>%
+#   distinct(condition_key, total_cells) %>%
+#   tidyr::separate(condition_key, into = c("condition", "bin"), sep = "___") %>%
+#   tidyr::pivot_wider(names_from = condition, values_from = total_cells, values_fill = 0) %>%
+#   # Example: >= 80 total spots, and at least 20 spots in each condition so proportions are well-defined
+#   filter((GBM + IDHmutant) >= 80, GBM >= 20, IDHmutant >= 20) %>%
+#   pull(bin)
+# 
+# bin_meta <- bin_meta %>% filter(bin %in% valid_bins)
+# bin_meta$bin <- droplevels(bin_meta$bin)
+(N <- length(levels(bin_meta$bin)))
+#============================================================
+# # Variance-stabilizing transformation for multinomial proportions, centered per state
+# prop <- prop[as.character(bin_meta$condition_key), ]
+# prop_vst <- asin(sqrt(prop))
+# prop_centered <- scale(prop_vst, center = TRUE, scale = FALSE)
 
-stopifnot('binned counts does not match with metadata' = all(rownames(prop) == bin_meta$condition_key))
 
-## now filter out bins with very few cells
-# hist(bin_meta$total_cells)
-# quantile(bin_meta$total_cells, c(.1,.2, .25,.5))
-# sum(bin_meta$total_cells < 5)
 
-# remove binxslide combinations with fewer than 10 cells
-sum(bin_meta$total_cells < 100)
-
-# drop bins with fewer than 100 spots
-bin_meta <- bin_meta %>% filter(total_cells > 100)
-prop <- prop[bin_meta$condition_key, ]
+#============================================================
+all(rownames(prop_centered) == bin_meta$condition_key)
 #========================================================================
 ## build the full unobserved regular spatial grid (n_slides x N)
 #========================================================================
-# sample-1 is condition-1; sample-2 is condition-2
-bin_meta <- bin_meta %>% mutate(sample_id = fct_recode(condition, 
-                                                       'sample_1' = 'GBM',
-                                                       'sample_2' = 'IDHmutant'), 
-                                grid_key =  condition_key)
-
 full_grid <- expand_grid(
   sample_id =  levels(bin_meta$sample_id), ## first argument varies slowest
   bin =  levels(bin_meta$bin)) %>% 
-  mutate(grid_key = paste(sample_id, bin, sep = '___'))
-
+  mutate(grid_key = paste(sample_id, bin, sep = '___')) %>% 
+  mutate(grid_key = factor(grid_key, 
+                    levels = gtools::mixedsort(unique(grid_key))))
 ## make the same variable with bin_meta
 bin_meta <- bin_meta %>% 
   arrange(match(grid_key, full_grid$grid_key))
-
 ## construct the permutation matrix projection_matrix
 matched_indices <- match(bin_meta$grid_key, full_grid$grid_key)
-
 n_obs <- nrow(bin_meta); n_full <- nrow(full_grid)
 projection_matrix <- matrix(0, nrow = n_obs, ncol = n_full)
 for(i in seq_len(n_obs)){
   projection_matrix[i, matched_indices[i]] <- 1
 }
 image(projection_matrix)
+dim(projection_matrix)
 #=========================================
 ## prepare the coregionalization matrix
 #=========================================
-W <- model.matrix(~0 + levels(bin_meta$sample_id))
+W <- model.matrix(~0 + levels(bin_meta$condition))
 B <- tcrossprod(W) 
-# image(B)
+image(B)
 
 noise_diag <- c(1, 2)
 ## donor-intercept structure in observed space
 Z_donor <- model.matrix(~0 + bin_meta$sample_id)
 cov_donor <- tcrossprod(Z_donor)
 image(cov_donor)
-
-stopifnot('counts matrix is not aligned with metadata' = all(rownames(prop) == bin_meta$condition_key))
+stopifnot('counts matrix is not aligned with metadata' = all(rownames(prop_centered) == bin_meta$grid_key))
 #============================================================
-# center the abundance ata
-#============================================================
-prop <- scale(prop, center = T, scale = T)
-
-
-# as_tibble(prop) %>% 
-#   mutate(condition = bin_meta$condition) %>% 
-#   group_by(condition) %>% 
-#   summarise(across(everything(), \(x) mean(x, na.rm = TRUE)))
-
-par(mfrow = c(1,2))
-plot(prop[, 'Vasc']~ bin_meta$condition)
-plot(prop[, 'Neuron']~ bin_meta$condition)
-
-plot(prop[, 'Vasc']~ bin_meta$total_cells, pch = 20, col = factor(bin_meta$condition))
-plot(prop[, 'Neuron']~ bin_meta$total_cells, pch = 20, col = factor(bin_meta$condition))
-
-plot(prop[, 'Neuron']~ bin_meta$LE, pch = 20, col = factor(bin_meta$condition))
-plot(prop[, 'Vasc']~ bin_meta$CTmvp, pch = 20, col = factor(bin_meta$condition))
-
-
-plot(prop[, 'cMESHyp']~ bin_meta$condition)
-plot(prop[, 'cMESInf']~ bin_meta$condition)
-plot(prop[, 'cMESVasc']~ bin_meta$condition)
-plot(prop[, 'cProlifMetab']~ bin_meta$condition)
-plot(prop[, 'cOXPHOS']~ bin_meta$condition)
-plot(prop[, 'Oligo']~ bin_meta$condition)
-plot(prop[, 'cNPC']~ bin_meta$condition)
-plot(prop[, 'cOPC1']~ bin_meta$condition)
-par(mfrow=c(1,1))
-
 #============================================================
 #the coordinate axis for input
 isodepth_ <- bin_meta %>% select(all_of(ivy)) %>% distinct() %>% as.matrix()
-# bin_meta$grid_key <- bin_meta$condition_key # need grid key for core code
 #============================================================
 # create environment to pass these variables for fitting
 #============================================================
 data_env <- new.env()
-data_env$counts <- prop
+data_env$counts <- prop_centered
 data_env$metadata <- bin_meta
 data_env$isodepth_ <- isodepth_
 data_env$N <- N
@@ -236,7 +216,7 @@ data_env$CONTRAST_VECTOR <- c(1, -1)
 data_env$CONTRAST <- 'WT_vs_Mutant'
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
-data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
+data_env$n_monte_carlo_simulations = 3000 # no.of monte carlo samples
 data_env$features_to_fit <- colnames(prop)
 data_env$test_coords <- NULL
 data_env$PLOT_POSTERIOR <- FALSE
@@ -245,34 +225,21 @@ data_env$RETURN_FITS <- TRUE
 data_env$kernel_params <- NULL # if my parameters are already fit, I don't want to fit likelihood again
 
 ## save variables to memory
-write_rds(data_env, file = 'output/glioma_condition_data_env.rds')
-#============================================================
-# data_env <- read_rds('output/visium_data_env.rds')
+write_rds(data_env, file = 'output/glioma_condition_kmeans_data_env.rds')
 #============================================================
 ## source implementation modules
 #============================================================
-source('src/argo/fit_ARGO.R')
-source('src/R/nll_and_gradients.R')
-source('src/R/posterior_predictive_plots.R')
-source('src/R/contrast-test-with-funGP.R')
-source('src/R/generate_cc_matrix.R')
-source('src/R/compute_analytical_pvalue.R')
-source('src/R/derive_KLT_CI_bands.R')
-source('src/R/compute_exceedence_statistics.R')
-source('src/R/compute_exceedence_metrics.R')
-source('src/R/plot_conf_bands.R')
-
 res.ARGO <- fit_ARGO(data_env)
-write_rds(res.ARGO, file = 'output/WT_vs_mutant_condition_results.rds')
-
-# I don't need to fit the model within each slide separately.
-# I can just jointly model across all slides and split by condition -- not modeling donor effects
-
+res.ARGO$params
+write_rds(res.ARGO, file = 'output/WT_vs_mutant_kmeans_results.rds')
+#============================================================
+# data_env <- read_rds('output/glioma_condition_data_env.rds')
+# list2env(as.list(data_env), envir = globalenv())
+# res.ARGO <- read_rds('output/WT_vs_mutant_condition_results.rds')
 #=================================================
 ## visualize results
 #=================================================
 funGP_fits <- res.ARGO$resObjects
-
 funGP_res <- funGP_fits %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
   mutate(across(c(neglogp, deviation), as.numeric)) %>% 
@@ -280,7 +247,10 @@ funGP_res <- funGP_fits %>%
   mutate(fdr = p.adjust(exp(-neglogp), method = 'BH')) %>%
   arrange(desc(neglogp)) %>% 
   mutate(Rank = row_number()) 
-
+funGP_res
+#=================================================
+## where the significant deviation lies
+#=================================================
 ggplot(funGP_res %>% arrange(desc(stats)), 
        aes(x = Rank, y = stats)) +
   # Draws the main sorted line/points
@@ -317,7 +287,7 @@ ggplot(funGP_res %>% arrange(desc(stats)),
   )
 
 
-v_thresh <- .01
+v_thresh <- 1
 h_thresh <- -log(0.05)
 funGP_res %>% mutate(status = case_when(
   neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',
@@ -335,7 +305,7 @@ funGP_res %>% mutate(status = case_when(
     )
   ) + 
   geom_text_repel(
-    data = . %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 5), slice_tail(., n = 5))},
+    data = . %>% arrange(desc(stats)) %>% {bind_rows(slice_head(., n = 5), slice_tail(., n = 10))},
     aes(label = gene),
     size = 5, 
     family = 'Arial',
@@ -343,7 +313,7 @@ funGP_res %>% mutate(status = case_when(
     box.padding = 0.5,
     point.padding = 0.3,
     segment.color = "gray", 
-    max.overlaps = 20
+    max.overlaps = 30
   ) +
   # 2. Horizontal significance threshold line: -log10(0.05) ~ 1.301
   geom_hline(yintercept = h_thresh, color = "red", linetype = "dashed", linewidth = .75) +

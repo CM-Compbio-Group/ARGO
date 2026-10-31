@@ -2,8 +2,13 @@
 ## read list of seurat objects with representative images
 #===================================================================
 library(Seurat)
+library(RColorBrewer)
+
+res.ARGO <- read_rds(glue('output/old_vs_adult_N30_diff_testing_results.rds'))
+funGP_fits <- res.ARGO$resObjects
 
 adxlist <- read_rds('~/Desktop/adxlist.rds')
+dfm <- read_rds('data/temp/dfm.rds')
 adxlist
 
 ## pick one slide each
@@ -12,14 +17,15 @@ adxlist <- dxlist[c(3,5)]
 write_rds(adxlist, '~/Desktop/adxlist.rds')
 tc <- adxlist[[1]]@reductions$X_spatial_coords@cell.embeddings 
 adxlist[[1]]@reductions$X_spatial_coords@cell.embeddings <- -tc
-img_title <- c('24wk', '90wk')
 
+img_title <- c('24wk', '90wk')
+cols <- brewer.pal(n = length(unique(dfm$tissue)), name = "Set2")
 make_spatial_plot <- function(dx, plot_title){
   DimPlot(dx, 
           group.by = 'tissue',
           # features = 'isodepth',
           reduction = 'X_spatial_coords', 
-          alpha = .5, 
+          alpha = .5, cols=cols,
           pt.size = .65, stroke.size = 0) +
     theme_void(base_family = 'Arial') + 
     # Locks the physical aspect ratio so the brain doesn't distort, and removes 5% internal padding
@@ -81,21 +87,36 @@ obs <- obs %>%
   
 dfm$coord_x <- obs %>% filter(spot_id %in% rownames(dfm)) %>%
   arrange(match(spot_id, rownames(dfm))) %>% pull(coord_x)
-
+write_rds(dfm, 'data/temp/dfm.rds')
 #===================================================================
 ## visualize some representative genes in space
 #===================================================================
-genes_to_plot <- c('Bcl11b', 'Npr3', 'Irf7', 'Ptprc', 'Foxp2')
+# genes_to_plot <- c('Bcl11b', 'Npr3', 'Irf7', 'Ptprc', 'Foxp2')
+genes_to_plot <- 'Serpina3n'
 ## get roi for each gene
 roi <- lapply(funGP_fits[genes_to_plot], function(kxx) isodepth_[which(abs(kxx$statistic) > kxx$band)])
 sapply(roi, length)
 
+filter(dfm, coord_x %in% roi$Serpina3n) %>% 
+  dplyr::count(tissue) %>% 
+  mutate(
+    proportion = n / sum(n),         # Fraction of the total (0 to 1)
+    percentage = (n / sum(n)) * 100  # Percentage of the total (0% to 100%)
+  )
+  
+
+dxlist <- lapply(adxlist, function(dx) subset(dx, subset = tissue == 'olfactory region'))
+lapply(dxlist, FeaturePlot, 'Serpina3n', reduction = 'X_spatial_coords')
+lapply(dxlist, DimPlot, group.by = 'tissue', reduction = 'X_spatial_coords')
+
+
+source('src/R/spatial_ROI_plot.R')
+
 figs <- lapply(genes_to_plot, function(gene) {
   message(gene)
   rx <- roi[[gene]];
-  lapply(adxlist, plot_roi_split, gene = gene, ROI = rx, metadata = dfm )
+  lapply(dxlist, plot_roi_split, gene = gene, ROI = rx, metadata = dfm )
 })
-
 
 names(figs) <- genes_to_plot
 plots <- lapply(genes_to_plot, function(gene) {
@@ -125,7 +146,7 @@ plots <- lapply(genes_to_plot, function(gene) {
 
 names(plots) <- genes_to_plot
 for(gene in genes_to_plot){
-  ggsave(plots[[gene]], file = glue('figs/{gene}.pdf'), width=4,height=2)
+  ggsave(plots[[gene]], file = glue('figs/{gene}_cc.pdf'), width=4,height=2)
 }
 
 
