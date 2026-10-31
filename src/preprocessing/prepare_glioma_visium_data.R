@@ -42,21 +42,10 @@ df <- scores_softplus %>%
                         rownames_to_column('spot_id') %>% 
                         as_tibble()
 
-levels(df$condition) # "GBM"       "IDHmutant"
+# levels(df$condition) # "GBM"       "IDHmutant"
 #============================================================
 ## prepare abundance data
 #============================================================
-## account for relative abundance of WT and mutant spots
-cond_weights <- df %>%
-  dplyr::count(condition, name = "total_cond_spots") %>%
-  mutate(cond_weight = total_cond_spots / sum(total_cond_spots))
-
-# Total spots in each bin across BOTH conditions combined
-bin_totals <- df %>%
-  dplyr::count(bin, name = "total_bin_spots")
-
-View(df %>% dplyr::count(condition, MP, name = 'n_cells'))
-
 # define proportions relative to total number of cells in each bin; across all cell types. 
 # number of cells from each condition in this bin
 counts <- df %>%
@@ -105,6 +94,7 @@ prop <- counts %>%
   column_to_rownames('condition_key') %>%
   as.matrix()
 
+pheatmap(prop)
 #============================================================
 # build aligned bin metadata
 coords <- df %>% 
@@ -124,6 +114,7 @@ stopifnot('binned counts does not match with metadata' = all(rownames(prop) == b
 tapply(prop[, 'cMESHyp'], bin_meta$condition, mean)
 tapply(prop[, 'Vasc'],    bin_meta$condition, mean)
 tapply(prop[, 'cOXPHOS'], bin_meta$condition, mean)
+tapply(prop[, 'cMESAst'], bin_meta$condition, mean)
 #============================================================
 prop_centered <- scale(prop, center = TRUE, scale = TRUE)
 #============================================================
@@ -132,6 +123,7 @@ boxplot(prop_centered[, 'cOXPHOS']~ bin_meta$condition, main = 'cOxphos')
 boxplot(prop_centered[, 'cMESHyp']~ bin_meta$condition, main = 'cMesHyp')
 boxplot(prop_centered[, 'Vasc']~ bin_meta$condition, main = 'Vasc')
 boxplot(prop_centered[, 'cMESInf']~ bin_meta$condition, main = 'cMesInf')
+par(mfrow=c(1,1))
 #============================================================
 # filter at the bin level
 # Require a bin to have sufficient spots in BOTH conditions (or relax threshold for the minor condition)
@@ -147,13 +139,6 @@ boxplot(prop_centered[, 'cMESInf']~ bin_meta$condition, main = 'cMesInf')
 # bin_meta$bin <- droplevels(bin_meta$bin)
 (N <- length(levels(bin_meta$bin)))
 #============================================================
-# # Variance-stabilizing transformation for multinomial proportions, centered per state
-# prop <- prop[as.character(bin_meta$condition_key), ]
-# prop_vst <- asin(sqrt(prop))
-# prop_centered <- scale(prop_vst, center = TRUE, scale = FALSE)
-
-
-
 #============================================================
 all(rownames(prop_centered) == bin_meta$condition_key)
 #========================================================================
@@ -175,14 +160,14 @@ projection_matrix <- matrix(0, nrow = n_obs, ncol = n_full)
 for(i in seq_len(n_obs)){
   projection_matrix[i, matched_indices[i]] <- 1
 }
-image(projection_matrix)
-dim(projection_matrix)
+# image(projection_matrix)
+# dim(projection_matrix)
 #=========================================
 ## prepare the coregionalization matrix
 #=========================================
 W <- model.matrix(~0 + levels(bin_meta$condition))
 B <- tcrossprod(W) 
-image(B)
+# image(B)
 
 noise_diag <- c(1, 2)
 ## donor-intercept structure in observed space
@@ -210,7 +195,7 @@ data_env$noise_diag <- noise_diag # mapping from individual samples to condition
 data_env$KERNEL = 'RBF'
 data_env$FIT_DONOR <- FALSE
 data_env$FIT_CONDITIONAL_NOISE <- TRUE
-data_env$LAMBDA <- 1 # regularization for noise terms in GP fits
+data_env$LAMBDA <- 1e-2 # regularization for noise terms in GP fits
 
 data_env$CONTRAST_VECTOR <- c(1, -1)
 data_env$CONTRAST <- 'WT_vs_Mutant'
@@ -225,17 +210,13 @@ data_env$RETURN_FITS <- TRUE
 data_env$kernel_params <- NULL # if my parameters are already fit, I don't want to fit likelihood again
 
 ## save variables to memory
-write_rds(data_env, file = 'output/glioma_condition_kmeans_data_env.rds')
+write_rds(data_env, file = 'output/glioma_condition_kmeans_N_100_data_env.rds')
 #============================================================
 ## source implementation modules
 #============================================================
 res.ARGO <- fit_ARGO(data_env)
 res.ARGO$params
-write_rds(res.ARGO, file = 'output/WT_vs_mutant_kmeans_results.rds')
-#============================================================
-# data_env <- read_rds('output/glioma_condition_data_env.rds')
-# list2env(as.list(data_env), envir = globalenv())
-# res.ARGO <- read_rds('output/WT_vs_mutant_condition_results.rds')
+# write_rds(res.ARGO, file = 'output/WT_vs_mutant_kmeans_N_25_results.rds')
 #=================================================
 ## visualize results
 #=================================================
@@ -336,3 +317,7 @@ funGP_res %>% mutate(status = case_when(
   guides(
     color = guide_legend(override.aes = list(size = 5, alpha = 1))
   )
+#============================================================
+# data_env <- read_rds('output/glioma_condition_data_env.rds')
+# list2env(as.list(data_env), envir = globalenv())
+# res.ARGO <- read_rds('output/WT_vs_mutant_condition_results.rds')

@@ -3,43 +3,66 @@ list2env(as.list(data_env), envir = globalenv())
 res.ARGO <- read_rds('output/WT_vs_mutant_condition_results.rds')
 funGP_fits <- res.ARGO$resObjects
 
-funGP_res <- funGP_fits %>%
-  map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
-  mutate(across(c(neglogp, deviation), as.numeric)) %>% 
-  mutate(stats = neglogp * sign(deviation)) %>%
-  mutate(fdr = p.adjust(exp(-neglogp), method = 'BH')) %>%
-  arrange(desc(neglogp)) %>% 
-  mutate(Rank = row_number()) 
+funGP_summaries <- lapply(funGP_fits, summarize_argo_excursions)
+funGP_res <- do.call('rbind', funGP_summaries) %>% 
+  mutate(feature = names(funGP_fits), 
+         fdr = p.adjust(exp(-neglogp), method = 'BH'),
+         stats = neglogp * signed_deviations) %>%
+  relocate(feature, .before = everything()) %>% 
+  arrange(desc(neglogp)) %>%
+  mutate(Rank = row_number())
+funGP_res
+
+# signed_deviations <- sapply(funGP_summaries, '[[', 'net_sign')
+# polarities <- sapply(funGP_summaries, '[[', 'polarity')
+
+# funGP_res <- funGP_fits %>%
+#   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
+#   mutate(across(c(neglogp, deviation), as.numeric)) %>% 
+#   mutate(stats = neglogp * signed_deviations, 
+#          polarity = polarities) %>%
+#   mutate(fdr = p.adjust(exp(-neglogp), method = 'BH')) %>%
+#   arrange(desc(neglogp)) %>% 
+#   mutate(Rank = row_number()) 
 
 #============================================================
 #============================================================
-v_thresh <- 1
-h_thresh <- -log(0.05)
+h_thresh <- 1
+v_thresh <- -log(0.05)
+
 p <- funGP_res %>% mutate(status = case_when(
-  neglogp > h_thresh & deviation > v_thresh ~ 'Upreg',
-  neglogp > h_thresh & deviation < -v_thresh ~ 'Downreg',
+  neglogp > v_thresh & directed_deviation > h_thresh ~ 'Upreg',
+  neglogp > v_thresh & directed_deviation < -h_thresh ~ 'Downreg',
   TRUE ~ 'NS'
 )) %>% arrange(status == 'Not Significant') %>%
-  ggplot(aes(x = deviation, y = neglogp)) +
+  ggplot(aes(x = directed_deviation, y = neglogp)) +
   # 1. Plot points with grey color and 25% alpha transparency
-  geom_point(aes(color = status, alpha = status), size = 2.5, shape = 20) +
-  scale_color_manual( name = "",
+  geom_point(aes(color = status, alpha = status, size = polarity),  shape = 20) +
+  scale_color_manual( name = bquote(Delta * " abundance"),
                       values = c(
                         "Upreg" = "#e41a1c",   # Professional Red
                         "Downreg" = "#377eb8",  # Professional Blue
-                        "NA" = "gray60"     # Muted Gray
+                        "NS" = "gray70"     # Muted Gray
                       )
-  ) + scale_alpha_manual( name = NULL, 
+  ) + scale_alpha_manual(name = "", 
                           guide = "none",
                           values = c(
                             "Upreg" = .5,   # Professional Red
                             "Downreg" = .5,  # Professional Blue
                             "NS" = .1     # Muted Gray
                           )) + 
+  scale_size_continuous(
+    name = 'Polarity',
+    range = c(1, 7.5),
+    # breaks = waiver(),
+    # labels = waiver(),
+    limits = c(0.5, 1),
+    trans = "identity"
+  ) + 
   geom_text_repel(
-    data = . %>% arrange(desc(stats), desc(deviation)), #%>%
+    data = . %>% arrange(desc(stats), desc(directed_deviation)), #%>%
       # {bind_rows(slice_head(., n=5), slice_tail(., n=))},
-    aes(label = gene),
+    aes(label = feature),
     size = 8 / .pt,
     family = 'Arial',
     color = "black",
@@ -49,14 +72,15 @@ p <- funGP_res %>% mutate(status = case_when(
     max.overlaps = 20
   ) +
   # 2. Horizontal significance threshold line: -log10(0.05) ~ 1.301
-  geom_hline(yintercept = h_thresh, color = "red", linetype = "dashed", linewidth = .75) +
+  geom_hline(yintercept = v_thresh, color = "red", linetype = "dashed", linewidth = .75) +
   # 3. Vertical effect size threshold lines
-  geom_vline(xintercept = c(-v_thresh, v_thresh), color = "red", linetype = "dashed", linewidth = .75) +
+  geom_vline(xintercept = c(-h_thresh, h_thresh), color = "red", linetype = "dashed", linewidth = .75) +
   # 4. Axis Labels
   labs(
-    x = "max deviation (LFC)",
+    x = "Max directed deviation",
     y = expression(-log10~" analytic pval")
-  ) + scale_y_log10() + 
+  ) + 
+  # scale_y_log10() + 
   # 5. Clean, professional theme minimalization
   theme_bw(base_family = 'Arial', 
            base_size = 12) +
@@ -69,37 +93,30 @@ p <- funGP_res %>% mutate(status = case_when(
     legend.position = "right", 
     # legend.title = element_text(size = 12, face = "bold"), # Title font size
     legend.text = element_text(size = 8),
-    legend.box = "horizontal",
-    legend.margin = margin(l = -5, r = 0, b = 0, t = 0), # Pulls legend closer to plot
+    legend.box = "vertical",
+    legend.margin = margin(t = 5, r = 2.5, b = 5, l = 2.5, unit = "mm"), # Pulls legend closer to plot
     # legend.text = element_text(size = 10),              # Reduces font size if needed
     legend.key.size = unit(3, "mm")                 # Shrinks the color boxes
   ) + 
   guides(
-    color = guide_legend(override.aes = list(size = 5, alpha = 1))
-  ) + scale_x_continuous(expand = expansion(mult = c(0.15, 0.15))) +
+    color = guide_legend(order = 1,override.aes = list(size = 5, alpha = 1)), 
+    size  = guide_legend(order = 2)) +
+  scale_x_continuous(expand = expansion(mult = c(0.15, 0.15))) +
   # scale_y_continuous(
   #   expand = expansion(mult = c(0.025, 0.15))) +
   coord_cartesian(clip = "off")
 
 print(p)
-ggsave(plot = p, filename = glue('figs/{KERNEL}_{CONTRAST}_abundance_volcano.pdf'), 
-       width = 4, height = 3, units = 'in')
+
+ggsave(plot = p, filename = glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}__N_25_abundance_volcano.pdf'), 
+       width = 5, height = 4, units = 'in')
 
 #============================================================
 #============================================================
-
 # visualize abundances in 3D
-all(metadata$grid_key == rownames(counts))
-bin_meta <- cbind(metadata, counts)
-
+all(bin_meta$grid_key == rownames(data_env$counts))
+bin_meta <- cbind(bin_meta, counts)
 #============================================================
-#============================================================
-library(scatterplot3d)
-
-col = ifelse(bin_meta$condition == "IDHmutant", "#1f77b4", "#d62728")
-col_transparent <- adjustcolor(col, alpha.f = 0.5)
-psz <- scales::rescale(bin_meta$cMESInf, to = c(0.5, 3))
-
 dxf <- bin_meta %>% select(bin, CT, CTmvp, CTpan, LE) %>% distinct() %>% arrange(bin)
 pan <- dxf$CTpan
 le <- dxf$LE
@@ -109,11 +126,15 @@ mvp <- dxf$LE
 stats <- funGP_fits$cMESInf$statistic
 band <- funGP_fits$cMESInf$band
 idx <- which((stats > band) | (stats < -band) )
-
 plot(le, stats, ylim = range(c(stats, band, -band)), col = 'blue', pch=20, cex=1.5)
 points(le, band, col = 'red', pch = 20)
 points(le, -band, col = 'red', pch = 20)
+#============================================================
+library(scatterplot3d)
 
+col = ifelse(bin_meta$condition == "IDHmutant", "#1f77b4", "#d62728")
+col_transparent <- adjustcolor(col, alpha.f = 0.5)
+psz <- scales::rescale(bin_meta$cMESInf, to = c(0.5, 3))
 
 s3d <- scatterplot3d(
   x = bin_meta$CTmvp, 

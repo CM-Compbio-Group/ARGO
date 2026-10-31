@@ -175,8 +175,8 @@ fit_ARGO <- function(data_env){
                                  gr = computeNegLogLikelihoodGradient,
                                  argo_env = argo_env, # pass the current environment
                                  method = 'L-BFGS-B', 
-                                 lower = c(min_log_bw, rep(-3, 2 + n_noise)),
-                                 upper = c(max_log_bw,  rep(3, 2 + n_noise)),
+                                 lower = c(min_log_bw, log(.5), rep(-1.5, 1 + n_noise)),
+                                 upper = c(log(6), log(3), rep(log(.7), 1 + n_noise)),
                                  control = list(maxit = 1000, 
                                                 trace = 0)
       )

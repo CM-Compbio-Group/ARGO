@@ -1,7 +1,5 @@
 library(ggpubr)
-library(cowplot)
 library(gridExtra)
-library(extrafont)
 
 make_tern_plot <- function(df, condition, state){
   
@@ -69,57 +67,60 @@ colnames(simplex_coords) <- paste('simplex', colnames(simplex_coords), sep = '_'
 simplex_df <- bind_cols(bin = raw_bin_coords$bin, as.data.frame(simplex_coords))
 
 # 3. Join onto bin_meta (replacing any previous simplex_ columns)
-bin_meta <- bin_meta %>%
+bin_meta <- data_env$metadata %>%
   select(-any_of(c("simplex_CT", "simplex_CTmvp", "simplex_CTpan", "simplex_LE"))) %>%
   left_join(simplex_df, by = "bin")
+
+all(bin_meta$grid_key == rownames(data_env$counts))
+bin_meta <- bind_cols(bin_meta, data_env$counts)
+
 
 
 roi_index <- lapply(funGP_fits, function(kxx) which(abs(kxx$statistic) > kxx$band))
 sapply(roi_index, length)
 
-stats <- funGP_fits$cMESInf$statistic
-band <- funGP_fits$cMESInf$band
-idx <- which((stats > band) | (stats < -band) )
+# stats <- funGP_fits$Synaptic$statistic
+# band <- funGP_fits$Synaptic$band
+# idx <- which((stats > band) | (stats < -band) )
+# 
+# plot(simplex_df$simplex_LE, stats, ylim = range(c(stats, band, -band)),
+#      col = 'blue', pch=20, cex=1.5, main = 'Synaptic')
+# points(simplex_df$simplex_LE, band, col = 'red', pch = 20)
+# points(simplex_df$simplex_LE, -band, col = 'red', pch = 20)
+# legend('topright', col = c('blue','red'), legend = c('statistic', 'conf band'), pch=20, cex=1.5, bty='n')
+# 
+for(state in c('cMESAst','cMESHyp', 'cMESInf', 'cMESVasc', 'Synaptic')){
+  message(state)
+  p1 <- make_tern_plot(filter(bin_meta, condition == 'IDHmutant'), 'IDHmutant', state)
+  p2 <- make_tern_plot(filter(bin_meta, condition == 'GBM'), 'IDHwt', state)
+  
+  p1_clean <- p1 + theme(legend.position = "none", plot.margin = margin(15, 10, 10, 25))
+  p2_clean <- p2 + theme(legend.position = "none", plot.margin = margin(15, 10, 10, 10))
+  
+  shared_legend <- get_legend(p1)
+  g1 <- ggplotGrob(p1_clean)
+  g2 <- ggplotGrob(p2_clean)
+  
+  # 4. Use patchwork's wrap_elements() to arrange the frozen grobs and legend side-by-side
+  p_final <- wrap_elements(full = g1) + 
+    wrap_elements(full = g2) + 
+    wrap_elements(full = shared_legend) +
+    plot_layout(ncol = 3, widths = c(1, 1, 0.3)) + 
+    plot_annotation(title = glue('{state}')) + 
+    theme(plot.title = element_text(
+      family = "Arial",      # Font family
+      face = "bold",         # Font style ("plain", "italic", "bold", "bold.italic")
+      size = 12,             # Font size in points
+      hjust = 0.01,           # Centering: 0 = Left, 0.5 = Centered, 1 = Right
+      color = "grey20",      # Font color
+      margin = margin(b = 10)# Spacing/margin underneath the title (bottom margin)
+    ))
+  
+  # 3. Arrange using grid.arrange, which natively respects ggtern grobs
+  pdf(glue('figs/{state}_N25.pdf'), width = 8, height = 4)
+  print(p_final)
+  dev.off()
+}
 
-plot(simplex_df$simplex_CTpan, stats, ylim = range(c(stats, band, -band)), col = 'blue', pch=20, cex=1.5)
-points(simplex_df$simplex_CTpan, band, col = 'red', pch = 20)
-points(simplex_df$simplex_CTpan, -band, col = 'red', pch = 20)
-
-
-
-# 4. Plot on ggtern
-bin_meta$inROI <- ifelse(bin_meta$bin %in% roi_index$cMESInf, 'T', 'F')
-
-
-state <- 'cMESVasc'
-p1 <- make_tern_plot(filter(bin_meta, condition == 'IDHmutant'), 'IDHmutant', state)
-p2 <- make_tern_plot(filter(bin_meta, condition == 'GBM'), 'IDHwt', state)
-
-p1_clean <- p1 + theme(legend.position = "none", plot.margin = margin(15, 10, 10, 25))
-p2_clean <- p2 + theme(legend.position = "none", plot.margin = margin(15, 10, 10, 10))
-
-shared_legend <- get_legend(p1)
-g1 <- ggplotGrob(p1_clean)
-g2 <- ggplotGrob(p2_clean)
-
-# 4. Use patchwork's wrap_elements() to arrange the frozen grobs and legend side-by-side
-p_final <- wrap_elements(full = g1) + 
-  wrap_elements(full = g2) + 
-  wrap_elements(full = shared_legend) +
-  plot_layout(ncol = 3, widths = c(1, 1, 0.3)) + 
-  plot_annotation(title = glue('{state}')) + 
-  theme(plot.title = element_text(
-    family = "Arial",      # Font family
-    face = "bold",         # Font style ("plain", "italic", "bold", "bold.italic")
-    size = 12,             # Font size in points
-    hjust = 0.01,           # Centering: 0 = Left, 0.5 = Centered, 1 = Right
-    color = "grey20",      # Font color
-    margin = margin(b = 10)# Spacing/margin underneath the title (bottom margin)
-  ))
-
-# 3. Arrange using grid.arrange, which natively respects ggtern grobs
-pdf(glue('figs/{state}.pdf'), width = 8, height = 4)
-print(p_final)
-dev.off()
 
 
