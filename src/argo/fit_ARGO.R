@@ -176,7 +176,7 @@ fit_ARGO <- function(data_env){
                                  argo_env = argo_env, # pass the current environment
                                  method = 'L-BFGS-B', 
                                  lower = c(min_log_bw, rep(-3, 2 + n_noise)),
-                                 upper = c(max_log_bw,  rep(3, 2 + n_noise)),
+                                 upper = c(log(7),  rep(3, 2 + n_noise)),
                                  control = list(maxit = 1000, 
                                                 trace = 0)
       )

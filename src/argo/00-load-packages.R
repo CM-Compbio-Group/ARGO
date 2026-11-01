@@ -16,6 +16,10 @@ library(edgeR)
 library(Lamian)
 library(tradeSeq)
 
+library(Seurat)
+library(RColorBrewer)
+library(pheatmap)
+
 source('src/R/get_cct_neglogp.R')
 source('src/R/summarize_dge_results.R')
 source('src/R/get_ranked_dge_plot.R')
