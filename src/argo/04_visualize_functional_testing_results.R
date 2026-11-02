@@ -26,7 +26,7 @@ funGP_fits <- res.ARGO$resObjects
 #----------------------------------------------------
 ## make deviation-heatmaps to summarize funGP findings
 #----------------------------------------------------
-stat_binary <- compute_stat_binary(funGP_fits, N)
+stat_binary <- compute_stat_binary(funGP_fits, data_env$N)
 pdf(glue('figs/{KERNEL}_{CONTRAST}_binary_heatmap.pdf'), width = 4, height = 3)
 binary_colors <- c("1" = "red3","0" = "lightgrey", "-1" = "navy")
 Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
@@ -40,22 +40,40 @@ Heatmap(stat_binary, cluster_columns = F, name = 'binary \nstatistic',
 dev.off()
 
 #----------------------------------------------------
-stat_lfc <- compute_stat_continuous(funGP_fits, N)
+stat_lfc <- compute_stat_continuous(funGP_fits, data_env$N)
 col_fun = colorRamp2(
-  breaks = c(-2, 0, 2),                        # Min, Center, Max limits
+  breaks = c(-1, 0, 1),                        # Min, Center, Max limits
   colors = c("#377eb8", "lightgrey", "#e41a1c")    # Blue to Red gradient
 )
 
-pdf(glue('figs/{KERNEL}_{CONTRAST}_FC_heatmap.pdf'), width = 4, height =3)
-Heatmap(stat_lfc, cluster_columns = F, name = 'LFC',
+library(circlize)
+library(viridis)
+
+breaks <- seq(min(data_env$isodepth_, na.rm = TRUE), 
+              max(data_env$isodepth_, na.rm = TRUE), 
+              length.out = 30)
+
+# 2. Create the color mapping function using the plasma palette
+isodepth_col_fun <- colorRamp2(breaks, plasma(30))
+
+top_anno <- HeatmapAnnotation(
+  Isodepth = data_env$isodepth_,
+  col = list(Isodepth = isodepth_col_fun), show_legend = F,
+  annotation_name_gp = gpar(fontsize = 8, fontfamily = 'Arial') 
+)
+
+pdf(glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}_FC_heatmap.pdf'), width = 3.5, height =2.5)
+Heatmap(stat_lfc, cluster_columns = F, name = "delta_expression",
         show_row_names = F,
         show_column_names = F, 
+        top_annotation = top_anno,
         col = col_fun,
-        row_names_gp = gpar(fontsize=2),
+        row_names_gp = gpar(fontsize=8),
         column_names_gp = gpar(fontsize=8), 
         heatmap_legend_param = list(
-          title_gp = gpar(fontsize = 8, fontface = "bold"), # Title size 14 pt
-          labels_gp = gpar(fontsize = 8)                    # Labels size 10 pt
+          title = expression(paste(Delta, " expression")), # Formatted label placed here
+          title_gp = gpar(fontsize = 8, fontface = "bold", fontfamily = "Arial"),
+          labels_gp = gpar(fontsize = 8, fontfamily = "Arial")
         ))
 dev.off()
 
@@ -207,10 +225,10 @@ par(mfrow=c(1,1))
 thresh <- c(.25, .5, .75, 1)
 summary_stats <- map_dfr(thresh, function(t) {
   # message(t)
-  funGP_res %>% filter(fdr < 0.05 & abs(deviation) > t) %>%
+  funGP_res %>% filter(fdr < 0.05 & abs(directed_deviation) > t) %>%
     summarise(LFC_threshold = t, 
-              upregulated = sum(net_auec > 0),
-              downregulated = sum(net_auec < 0),
+              upregulated = sum(n_pos_bins > 0),
+              downregulated = sum(n_neg_bins > 0),
               total = n())
 })
 

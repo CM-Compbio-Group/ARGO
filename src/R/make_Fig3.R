@@ -1,8 +1,9 @@
-# source('src/R/summarize_argo_excursions.R')
+source('src/R/summarize_argo_excursions.R')
 
-# data_env <- read_rds('output/glioma_condition_data_env.rds')
+N_BINS <- 65
+data_env <- read_rds(glue('output/glioma_kmeans_bysample_N_{N_BINS}_data_env.rds'))
 # list2env(as.list(data_env), envir = globalenv())
-# res.ARGO <- read_rds(glue('output/glioma_kmeans_bysample_N_{50}_results.rds'))
+res.ARGO <- read_rds(glue('output/glioma_kmeans_bysample_N_{N_BINS}_results.rds'))
 
 funGP_fits <- res.ARGO$resObjects
 funGP_summaries <- lapply(funGP_fits, summarize_argo_excursions)
@@ -49,7 +50,7 @@ p <- funGP_res %>% mutate(status = case_when(
   ) + 
   geom_text_repel(
     data = . %>% arrange(desc(stats), desc(directed_deviation)), #%>%
-      # {bind_rows(slice_head(., n=5), slice_tail(., n=))},
+      # {bind_rows(slice_head(., n=5), slice_tail(., n=5))},
     aes(label = feature),
     size = 8 / .pt,
     family = 'Arial',
@@ -79,11 +80,14 @@ p <- funGP_res %>% mutate(status = case_when(
     axis.text = element_text(size=8),
   ) + theme(
     legend.position = "right", 
+    plot.margin = margin(t = 2, r = 2, b = 2, l = 2, unit = "pt"),
+    legend.margin = margin(0, 0, 0, 0, unit = "pt"),
+    legend.box.margin = margin(0, 0, 0, 0, unit = "pt"),
+    legend.box.spacing = unit(3, "pt"),
+    
     # legend.title = element_text(size = 12, face = "bold"), # Title font size
     legend.text = element_text(size = 8),
     legend.box = "vertical",
-    legend.margin = margin(t = 5, r = 2.5, b = 5, l = 2.5, unit = "mm"), # Pulls legend closer to plot
-    # legend.text = element_text(size = 10),              # Reduces font size if needed
     legend.key.size = unit(3, "mm")                 # Shrinks the color boxes
   ) + 
   guides(
@@ -97,7 +101,7 @@ p <- funGP_res %>% mutate(status = case_when(
 print(p)
 
 ggsave(plot = p, filename = glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}_N_{N_BINS}_abundance_volcano.pdf'),
-       width = 5, height = 4, units = 'in')
+       width = 4.5, height = 3.5, units = 'in')
 
 #============================================================
 #============================================================

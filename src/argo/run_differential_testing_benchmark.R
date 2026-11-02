@@ -145,7 +145,7 @@ dev.off()
 # res.argo %>% arrange(desc(neglogp)) %>% filter(gene %in% genes & abs(deviation) > 1)
 
 
-dataset <- lapply(dataset, function(x) intersect(x, funGP.df$gene))
+dataset <- lapply(dataset, function(x) intersect(x, funGP_res$feature))
 sapply(dataset, length)
 
 STATISTIC <- 'PR'
@@ -165,7 +165,7 @@ compute_ranked_auprc <- function(ranked_list, signature, STATISTIC){
 
 
 ## loop through genesets and gather AUPRC curves across methods
-for(study in names(dataset)){
+for(study in c('Sziraki et al')){
   message(study)
   markers <- dataset[[study]]
   pr.curves <- lapply(res.list, function(df)  {
@@ -177,7 +177,7 @@ for(study in names(dataset)){
   
   cols <- c(  "orchid4","#bebada", "#8dd3c7", 'lightskyblue2', 'lightgreen', 'lightpink2', 'lightsalmon')
   
-  pdf(glue('figs/{STATISTIC}_{study}_lines.pdf'), width = 4, height = 4)
+  pdf(glue('figs/{STATISTIC}_{study}_lines.pdf'), width = 3, height = 3)
   par(mfrow = c(1,1), 
       mar = c(3.5, 3.5, 2, 1) + 0.1, 
       mgp = c(1.2, 0.4, 0),
@@ -217,13 +217,15 @@ for(study in names(dataset)){
     
   }
   legend("topright", 
-         cex=1,
+         cex=.75,
          legend = lgx, 
          text.font = 1,
          col = cols, 
          lty = c(1, rep(1,5)),
          lwd = 2,             # Line width
-         bty = "n")           # Removes the box border around the legend (optional)
+         bty = "n",
+         y.intersp = 0.65,
+         seg.len = 1.5)   
   
   dev.off()
   

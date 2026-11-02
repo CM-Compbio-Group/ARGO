@@ -10,11 +10,11 @@
 # have no use for condition_key here -- all information is summarized at level of condition_key
 # coords per bin per condition; counts per bin per condition
 
-# source('src/argo/00-load-packages.R')
+source('src/argo/00-load-packages.R')
 # source('src/R/bin_kdtree_adaptive.R')
 set.seed(42)
-# 
-# brain <- read_rds('~/Desktop/brain-seurat-objects/visium.rds')
+
+brain <- read_rds('~/Desktop/brain-seurat-objects/visium.rds')
 ivy <- levels(brain$ivy_niche)
 ## convert to relative scores for spots
 raw_scores <- as.matrix(brain@meta.data[, ivy])
@@ -81,7 +81,7 @@ counts <- df %>%
 # sum(is.na(counts$proportion))
 # plot(counts$proportion_raw~ counts$N_sb)
 # plot(counts$proportion~ counts$N_sb)
-filter(counts, proportion == 1) %>% dplyr::count(bin, MP)
+# filter(counts, proportion == 1) %>% dplyr::count(bin, MP)
 #============================================================
 composition_check <- counts %>%
   filter(supported) %>%
@@ -143,6 +143,7 @@ full_grid <- expand_grid(
   mutate(grid_key = factor(grid_key, 
                            levels = gtools::mixedsort(unique(grid_key))))
 
+
 ## make the same variable with bin_meta
 bin_meta <- bin_meta %>% 
   arrange(match(grid_key, full_grid$grid_key))
@@ -173,6 +174,7 @@ noise_diag <- as.numeric(slide_df %>%
 Z_donor <- model.matrix(~0 + bin_meta$sample_id)
 cov_donor <- tcrossprod(Z_donor)
 image(cov_donor)
+dim(cov_donor)
 
 stopifnot('counts matrix is not aligned with metadata' = all(rownames(prop_centered) == bin_meta$grid_key))
 #============================================================
@@ -190,7 +192,7 @@ data_env$N <- N
 data_env$projection <- projection_matrix
 data_env$W <- W
 data_env$B <- B
-data_env$donor_identity <- cov_donor
+data_env$cov_donor <- cov_donor
 data_env$noise_diag <- noise_diag # mapping from individual samples to condition
 data_env$KERNEL = 'RBF'
 data_env$FIT_DONOR <- TRUE
@@ -206,11 +208,14 @@ data_env$features_to_fit <- colnames(prop)
 data_env$test_coords <- NULL
 data_env$PLOT_POSTERIOR <- FALSE
 data_env$PLOT_CONF_BANDS <- FALSE
+data_env$GET_POSTERIOR <- FALSE
 data_env$RETURN_FITS <- TRUE
 data_env$kernel_params <- NULL # if my parameters are already fit, I don't want to fit likelihood again
 
 ## save variables to memory
 write_rds(data_env, file = glue('output/glioma_kmeans_bysample_N_{N_BINS}_data_env.rds'))
+#============================================================
+
 #============================================================
 ## source implementation modules
 #============================================================

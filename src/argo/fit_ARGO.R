@@ -10,7 +10,7 @@
 #' @param B coregionalization matrix
 #' @param projection projection matrix into observed data
 #' @param noise_diag ids for fitting condition-specific noise per condition
-#' @param donor_identity donor identity matrix
+#' @param cov_donor donor covariance matrix
 #' @param KERNEL what covariance kernel to fit 
 #' @param FIT_DONOR whether to fit donor level random intercepts
 #' @param FIT_CONDITIONAL_NOISE = TRUE # logical -- whether to fit condition specific noise for GPs
@@ -198,14 +198,21 @@ fit_ARGO <- function(data_env){
   }
     
   # visualize the posterior fits for genes
-  if(PLOT_POSTERIOR){
-    message('now plotting posterior fits')
-    posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
-    ggsave(wrap_plots(posteriors, ncol = 2) + 
-           plot_layout(guides = "collect"), 
-           filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
-           width=4,height=3)
+  if(GET_POSTERIOR){
+    message('now fitting posterior fits')
+    posteriors <- lapply(data_env$features_to_fit, get_posterior_predictive, argo_env)
+    return(posteriors)
   }
+  
+  # if(PLOT_POSTERIOR){
+  #   message('now plotting posterior fits')
+  #   posteriors <- lapply(data_env$features_to_fit, posterior_predictive_plots, argo_env)
+  #   ggsave(wrap_plots(posteriors, ncol = 2) + 
+  #          plot_layout(guides = "collect") &
+  #          theme(legend.position = "none"), 
+  #          filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_posterior_fits.pdf')),
+  #          width=4,height=3)
+  # }
   
   message('now running contrast tests')
   funGP_fits <- list()
@@ -222,7 +229,8 @@ fit_ARGO <- function(data_env){
       ci_plots[[feature]] <- plot_CI_bands(feature, funGP_fits[[feature]], argo_env)
     }
     ggsave( wrap_plots(ci_plots, ncol = 2) + 
-              plot_layout(guides = "collect"), 
+              plot_layout(guides = "collect") &
+              theme(legend.position = "bottom"), 
             filename = file.path('figs', glue('{KERNEL}_{CONTRAST}_conf_bands.pdf')),
             width=4,height=3)
   }

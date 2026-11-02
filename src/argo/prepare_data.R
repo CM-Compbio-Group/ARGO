@@ -26,7 +26,6 @@ if(CHECK_SPARSITY){
 ## fitting data with 30 bins, I will marginalize over bins that have high sparsity
 #============================================================
 N <- 30 # number of bins to fit data
-M <- N # testing at same resolution
 
 metadata <- metadata %>% 
   mutate(bin = factor(ntile(pseudotime, n = N))) %>% 
@@ -39,7 +38,6 @@ metadata <- metadata %>%
          condition_key = factor(condition_key, 
                              levels = gtools::mixedsort(unique(condition_key))))
 
-
 # prepare the pseudobulk counts data
 bin_cts <- rowsum(as.matrix(counts), group = metadata$grid_key)
 #=============================
@@ -47,7 +45,6 @@ bin_cts <- rowsum(as.matrix(counts), group = metadata$grid_key)
 #=============================
 bin_meta <- metadata %>% select(-c(cell_id, pseudotime)) %>% 
   distinct() %>% arrange(grid_key)
-
 stopifnot('binned counts does not match with metadata' = all(rownames(bin_cts) == bin_meta$grid_key))
 #====================================
 # filter out bins with high sparsity
@@ -68,7 +65,6 @@ full_grid <- expand_grid(
 ## make the same variable with bin_meta
 bin_meta <- bin_meta %>% 
   arrange(match(grid_key, full_grid$grid_key))
-
 ## construct the permutation matrix projection_matrix
 matched_indices <- match(bin_meta$grid_key, full_grid$grid_key)
 
@@ -77,13 +73,12 @@ projection_matrix <- matrix(0, nrow = n_obs, ncol = n_full)
 for(i in seq_len(n_obs)){
   projection_matrix[i, matched_indices[i]] <- 1
 }
-
+dim(projection_matrix)
 #=========================================
 ## prepare the coregionalization matrix
 #=========================================
 slide_df <- bin_meta %>% 
             distinct(sample_id, donor_id, condition)
-
 W <- model.matrix(~0 + slide_df$condition)
 B <- tcrossprod(W) 
 image(B)
@@ -103,10 +98,7 @@ stopifnot('counts matrix is not aligned with metadata' = all(rownames(bin_cts) =
 #============================================================
 bin_cts <- scale(t(DESeq2::varianceStabilizingTransformation(t(bin_cts))), 
                  center = T, scale = F)
-
 #============================================================
-data_env <- read_rds('output/expression_data_env.rds')
-res.ARGO <- read_rds('output/old_vs_adult_N30_diff_testing_results.rds')
 #============================================================
 # create environment to pass these variables for fitting
 #============================================================
@@ -125,39 +117,25 @@ data_env$FIT_DONOR <- FALSE
 data_env$FIT_CONDITIONAL_NOISE <- TRUE
 data_env$LAMBDA <- 1 # regularization for noise terms in GP fits
 
-data_env$CONTRAST_VECTOR <- c(-1/2, 1, -1/2)
-data_env$CONTRAST <- 'adult_vs_other'
+data_env$CONTRAST_VECTOR <- c(0, -1, 1)
+data_env$CONTRAST <- 'old_vs_adult'
 
 data_env$RETURN_CONF_BANDS = TRUE # compute conf bands only if I am interested in recovering intervals
 data_env$conf_level_alpha = 0.95
 data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
 data_env$features_to_fit <- colnames(bin_cts)
 data_env$test_coords <- NULL
-data_env$kernel_params <- res.ARGO$params
+data_env$kernel_params <- NULL
 data_env$PLOT_POSTERIOR <- FALSE
 data_env$PLOT_CONF_BANDS <- FALSE
 data_env$RETURN_FITS <- TRUE
 
-# write_rds(data_env, file = 'output/expression_data_env.rds')
+write_rds(data_env, file = 'output/expression_data_env.rds')
 #============================================================
 ## read downstream functions
 #============================================================
-source('src/argo/fit_ARGO.R')
-source('src/R/nll_and_gradients.R')
-source('src/R/posterior_predictive_plots.R')
-source('src/R/contrast-test-with-funGP.R')
-source('src/R/generate_cc_matrix.R')
-source('src/R/compute_analytical_pvalue.R')
-source('src/R/derive_KLT_CI_bands.R')
-source('src/R/compute_exceedence_statistics.R')
-source('src/R/compute_exceedence_metrics.R')
-source('src/R/plot_conf_bands.R')
-
-
 res.ARGO <- fit_ARGO(data_env)
-write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_N30_diff_testing_results.rds'))
-
-
+write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_N30_wo_donor_diff_testing.rds'))
 #=====================================================
 funGP.df <- res.ARGO$resObjects %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
@@ -211,3 +189,5 @@ p <- ggplot(dot_df, aes(x = sample_id, y = factor(gene, levels = rev(genes_to_pl
 
 ggsave(plot=p, filename = 'figs/top_diff_dotplot.pdf', width = 10, height = 6)
 
+# data_env <- read_rds('output/expression_data_env.rds')
+# res.ARGO <- read_rds('output/old_vs_adult_N30_diff_testing_results.rds')
