@@ -6,9 +6,10 @@
 #                     bandwidth = perturb_bandwidth,
 #                     ) %>% 
 #   mutate(Experiment = row_number())
+dataset <- 'PANCREAS'
+THRESH <- 0.2
 expt_df$center <- runif(nrow(expt_df), 0.2, 0.8)
-
-# sce <- read_rds(glue('testing/data/raw/{dataset}_sce.rds'))
+sce <- read_rds(glue('testing/data/raw/{dataset}_sce.rds'))
 
 t_ <- sce$pseudotime
 ord <- order(t_)
@@ -29,10 +30,8 @@ for (j in seq_len(nrow(expt_df))) {
 }
 
 image(lfc_mat[ord, ])
-
-thresh = 0.2
-lower_time_bound <- apply(lfc_mat, 2, function(z) min(t_[abs(z) > thresh])) # min time point where absolute lfc exceeds threshold
-upper_time_bound <- apply(lfc_mat, 2, function(z) max(t_[abs(z) > thresh]) ) # upper bound of interval
+lower_time_bound <- apply(lfc_mat, 2, function(z) min(t_[abs(z) > THRESH])) # min time point where absolute lfc exceeds THRESHold
+upper_time_bound <- apply(lfc_mat, 2, function(z) max(t_[abs(z) > THRESH]) ) # upper bound of interval
 
 time_bound_width <- upper_time_bound - lower_time_bound
 plot(time_bound_width~ expt_df$bandwidth)

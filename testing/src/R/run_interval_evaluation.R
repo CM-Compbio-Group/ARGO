@@ -92,14 +92,16 @@ run_interval_evaluation <- function(N = 25, FIT_CONDITIONAL_NOISE = TRUE, SAVE_F
     left_join(effect_info, by = 'gene')
   
   write_rds(eval.metrics, file = glue('testing/output/argo_interval_effect_info_NBINS_{N}.rds'))
+  eval.metrics <- read_rds(glue('testing/output/argo_interval_effect_info_NBINS_{N}.rds'))
   
   for(metric in colnames(eval.metrics[1:5])){
     message(metric)
-    p <- ggplot(eval.metrics, aes(x = factor(`signal strength`), 
+    p <- eval.metrics %>% dplyr::rename(RL = `relative length`) %>%
+            ggplot(aes(x = factor(`signal strength`), 
                                  y = !!sym(metric), 
                                  fill = factor(`signal strength`))) +
-      geom_boxplot(outlier.size = 1.5, alpha = 0.8) +
-      facet_wrap(~ `relative length`, labeller = label_both) +
+      geom_boxplot(outlier.size = .75, alpha = 0.65) +
+      facet_wrap(~ RL, labeller = label_both) +
       scale_fill_brewer(palette = "Set2") +
       labs(
         x    = "ARGO",
@@ -108,12 +110,12 @@ run_interval_evaluation <- function(N = 25, FIT_CONDITIONAL_NOISE = TRUE, SAVE_F
       ) +
       theme_bw(base_size = 8, base_family = "Arial") +
       theme(
-        text            = element_text(family = "Arial", size = 8),
+        text            = element_text(family = "Arial", size = 6),
         axis.title      = element_text(family = "Arial", size = 8),
-        axis.text       = element_text(family = "Arial", size = 8),
+        axis.text       = element_text(family = "Arial", size = 6),
         strip.text      = element_text(family = "Arial", size = 8),
         legend.title    = element_text(family = "Arial", size = 8),
-        legend.text     = element_text(family = "Arial", size = 8),
+        legend.text     = element_text(family = "Arial", size = 6),
         panel.grid      = element_blank(),
         legend.position = "bottom",
         legend.box.spacing = unit(2, "pt"), 
@@ -122,8 +124,9 @@ run_interval_evaluation <- function(N = 25, FIT_CONDITIONAL_NOISE = TRUE, SAVE_F
         legend.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt")
       )
     
+    print(p)
     ggsave(plot = p, filename = glue('testing/figs/{metric}_statistics_NBINS_{N}_signal_20.pdf'), 
-           width = 4, height = 2.5, units = 'in')
+           width = 3, height = 2, units = 'in')
     
   }
   

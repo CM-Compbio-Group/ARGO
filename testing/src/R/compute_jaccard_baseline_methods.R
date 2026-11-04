@@ -45,8 +45,6 @@ zeallot::`%<-%`(c(sim_counts, sim_meta, genes, effect_info),
                 read_rds(glue('testing/data/temp/{dataset}_w_replicates_interval_perturbation.rds')))
 
 ## update effect_info to track 20% FC as the signal thresholds
-
-
 # effect_info <- effect_info %>% 
 #   dplyr::rename(interval_left = interval_left_01,
 #                 interval_right = interval_right_01)
@@ -57,8 +55,9 @@ zeallot::`%<-%`(c(sim_counts, sim_meta, genes, effect_info),
 #                 `signal strength` = amplitude)
 # 
 # # get metadata for different scales of data representation
-# zeallot::`%<-%`(c(cell_level_meta, bin_level_meta, sample_level_meta, cell_type_meta), prepare_metadata(sim_meta, N))
-
+zeallot::`%<-%`(c(cell_level_meta, bin_level_meta,
+                  sample_level_meta, cell_type_meta), 
+                prepare_metadata(sim_meta, N))
 
 cell_type_range <- cell_level_meta %>% group_by(cell_type) %>%
   summarise(
@@ -79,7 +78,6 @@ cluster_intervals <- as_tibble(sce@colData) %>%
 celltype_counts <- rowsum(t(sim_counts), group = cell_level_meta$sample_cluster)
 ## assert that sample IDs match
 stopifnot(all(rownames(celltype_counts) == cell_type_meta$sample_cluster))
-
 clusters <- unique(cell_type_meta$cell_type)
 #======================================================
 ## perform differential testing
@@ -95,6 +93,12 @@ env <- environment()
 ## call differential testing passing the local environment
 p.vals <- map(diff.testing.methods, ~ .x(env))
 fdr.list <- lapply(p.vals, function(res) apply(res, 2, p.adjust, method = 'BH'))
+
+write_rds(fdr.list, 'testing/output/baseline_methods_FDR_list.rds')
+
+effect_info <- effect_info %>% right_join(rel_length, by = 'bandwidth') %>%
+  mutate(across(`relative length`, ~ round(., 3))) %>% 
+  dplyr::rename(`signal strength` = amplitude)
 
 for(method in names(diff.testing.methods)){
   message(method)
@@ -112,12 +116,12 @@ for(method in names(diff.testing.methods)){
       fdr_threshold = .05
     )
   })
-  
-  p <- ggplot(combined_fdr, aes(x = factor(`signal strength`), 
+  p <- combined_fdr %>% dplyr::rename(RL = `relative length`) %>%
+        ggplot(aes(x = factor(`signal strength`), 
                                y = jaccard, 
                                fill = factor(`signal strength`))) +
-    geom_boxplot(outlier.size = 1.5, alpha = 0.8) +
-    facet_wrap(~ `relative length`, labeller = label_both) +
+    geom_boxplot(outlier.size = .75, alpha = 0.65) +
+    facet_wrap(~ RL, labeller = label_both) +
     scale_fill_brewer(palette = "Set2") +
     labs(
       x    = method,
@@ -126,12 +130,12 @@ for(method in names(diff.testing.methods)){
     ) +
     theme_bw(base_size = 8, base_family = "Arial") +
     theme(
-      text            = element_text(family = "Arial", size = 8),
+      text            = element_text(family = "Arial", size = 6),
       axis.title      = element_text(family = "Arial", size = 8),
-      axis.text       = element_text(family = "Arial", size = 8),
+      axis.text       = element_text(family = "Arial", size = 6),
       strip.text      = element_text(family = "Arial", size = 8),
       legend.title    = element_text(family = "Arial", size = 8),
-      legend.text     = element_text(family = "Arial", size = 8),
+      legend.text     = element_text(family = "Arial", size = 6),
       panel.grid      = element_blank(),
       legend.position = "bottom",
       legend.box.spacing = unit(2, "pt"), 
@@ -140,7 +144,7 @@ for(method in names(diff.testing.methods)){
   
   print(p)
   ggsave(plot = p, filename = glue('testing/figs/{method}_JACCARD_20.pdf'), 
-         width = 4, height = 2.5, units = 'in')    
+         width = 3, height = 2, units = 'in')    
 
 }
 
