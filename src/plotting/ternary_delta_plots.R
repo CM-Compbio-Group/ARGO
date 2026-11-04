@@ -37,7 +37,8 @@ plot_differential_niche <- function(program_name, roi_bins, delta_thresh = 0.25,
       midpoint = 0,
       limits = c(-2.5, 2.5),
       oob = scales::squish,
-      name = bquote(atop(Delta ~ .(program_name), "(WT - Mut)")),
+      # name = bquote(atop(Delta ~ .(program_name), "(WT - Mut)")),
+      name = bquote(Delta ~ "(WT - Mut)"),
       guide = guide_colorbar(
         title.position = "top",
         barheight = unit(0.8, "in"),
@@ -67,6 +68,7 @@ plot_differential_niche <- function(program_name, roi_bins, delta_thresh = 0.25,
                                 hjust = 0, margin = margin(b = 2)),
       
       # Legend titles and labels
+      # legend.position = 'none',
       legend.title = element_text(family = "Arial", size = 8),
       legend.text = element_text(family = "Arial", size = 8),
       
@@ -86,9 +88,10 @@ bmf <- left_join(full_grid, bin_meta %>% distinct(sample_id, condition), by = 's
                                 levels = gtools::mixedsort(unique(condition_key)))
          )
 
-data_env$features_to_fit <- c('Vasc', 'cMESHyp', 'cUndiff', 'cProlifMetab')
+data_env$features_to_fit <- c('Vasc', 'cMESHyp', 'cUndiff', 'cProlifMetab',
+                              'cMESVasc', 'cOPC2', 'Synaptic', 'Myeloid')
 
-data_env$features_to_fit <- c('cMESVasc', 'cOPC2', 'Synaptic')
+# data_env$features_to_fit <- c('cMESVasc', 'cOPC2', 'Synaptic')
 
 data_env$kernel_params <- res.ARGO$params
 data_env$GET_POSTERIOR <- TRUE
@@ -126,10 +129,11 @@ colnames(simplex_coords) <- paste('simplex', colnames(simplex_coords), sep = '_'
 simplex_df <- bind_cols(bin = raw_bin_coords$bin, as.data.frame(simplex_coords))
 
 bmf <- left_join(bmf, simplex_df, by = "bin")
+
 for(celltype in data_env$features_to_fit){
   message(celltype)
   p <- plot_differential_niche(program_name = celltype, roi_bins = roi_index[[celltype]])
-  ggsave(plot = p, filename = glue('figs/{celltype}_ternary_delta.pdf'), width = 3.5, height=3.5)
+  ggsave(plot = p, filename = glue('figs/{celltype}_ternary_delta.pdf'), width = 2.5, height=2.5)
 }
 
 

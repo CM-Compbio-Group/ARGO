@@ -43,7 +43,7 @@ if(FIT_DATA){
 
 if(GENERATE_DATA){
   ## define control variables for perturbation experiment
-  N_SAMPLES = 3 # number of randomly sampled replicates for each condition 
+  N_SAMPLES = 3 # number of replicates per condition 
   N_GENES = 500 # number of genes to use
   perturb_frac = 0.2 # fraction of genes that must have perturbations
   sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
@@ -64,18 +64,23 @@ if(RUN_TESTING){
   plan(multisession, workers = 8)
   start_time <- Sys.time()
   eval.metrics <- base::lapply(seq_len(nrow(expt_df)), 
-                               run_differential_testing, N = 50, dataset) |> futurize(seed = TRUE)
+                               run_differential_testing, N = 25, dataset) |> futurize(seed = TRUE)
   end_time <- Sys.time()
   print(end_time - start_time)
-  write_rds(eval.metrics, glue('testing/output/diff_testing_eval_metrics.rds'))
+  write_rds(eval.metrics, glue('testing/output/diff_testing_N_25_p_500_eval_metrics.rds'))
   plan(sequential)
 }
+
+eval <- run_differential_testing(expt=29, N=25)
+
+## find the relative length that the 20% threshold corresponds to
+
 
 
 if(GENERATE_INTERVAL_BENCHMARK){
   set.seed(148)
   sce_fits <- read_rds(glue('testing/output/{dataset}_sce_fits.rds'))
-  generate_interval_perturbation(sce_fits = sce_fits, N_GENES = 3e3, N_SAMPLES = 1, dataset)
+  generate_interval_perturbation(sce_fits = sce_fits, N_GENES = 3e3, N_SAMPLES = 3, dataset)
 }
 
 if(RUN_INTERVAL_BENCHMARK){
@@ -87,57 +92,98 @@ effect_info <- read_rds('testing/output/interval_effect_info.rds')
 effect_info %>% group_by(amplitude, bandwidth) %>% summarise(mean(jaccard_index, na.rm = T))
 
 
+
 if(PLOT_RESULTS){
-  eval.metrics <- read_rds(glue('testing/output/diff_testing_results_EXPT3.rds'))
+  eval.metrics <- read_rds(glue('testing/output/diff_testing_N_25_p_500_eval_metrics.rds'))
   metrics <- do.call(rbind, eval.metrics)
   method <- rownames(metrics)
+  
   eval_long <- metrics %>% as_tibble() %>% 
-    mutate(method = method, 
-           Experiment = rep(seq(nrow(expt_df)), each = 7)) %>%
-    mutate(method = factor(method, levels = c('DESeq2', 'edgeR', 'Limma', 'tradeSeq', 'Lamian', 'argo_shared_noise', 'argo_conditional_noise'))) %>%
+    mutate(method = factor(method, levels = c('DESeq2', 'edgeR', 'Limma', 'tradeSeq', 
+                                              'Lamian', 'argo_conditional_noise')), 
+           Experiment = rep(seq(nrow(expt_df)), each = 6)) %>%
     pivot_longer(
       cols = c(sensitivity, specificity, precision, empirical_FDR, accuracy, F1, AUPRC),
       names_to = "metric",
       values_to = "value"
-    )
+    ) %>% merge(expt_df, by = 'Experiment') %>% 
+    mutate(method = fct_recode(method, 
+                               'ARGO' = 'argo_conditional_noise')) 
   
-  eval_long <- merge(eval_long, expt_df, by = 'Experiment') %>% as_tibble()
-  eval_long
+  
+  eval_long <- left_join(eval_long, rel_length, by = 'bandwidth') %>% 
+               mutate(across(rel_length, ~ round(., 3))) %>% 
+               dplyr::rename(`relative length` = rel_length,
+                                    `signal strength` = amplitude)
+  
+  method_cols <- c(
+    "ARGO"     = "orchid4",
+    "DESeq2"   = "#bebada",
+    "edgeR"    = "#8dd3c7",
+    "Limma"    = "lightskyblue2",
+    "Lamian"   = "lightgreen",
+    "tradeSeq" = "lightpink2"
+  )
   
   for(metrx in c('AUPRC', 'F1')){
     message(metrx)
-    p <- ggplot(eval_long %>% filter(metric == metrx), aes(x = method, y = value, color = method)) +
-      # Scales the 10 iterations tightly within each of the 7 method columns
-      geom_jitter(width = 0.15, alpha = 0.7, size = 1.8) + 
-      # ylim(c(0, 1)) + 
-      # Adds a clear center-point for the mean
-      stat_summary(fun = mean, geom = "point", color = "black", size=3, pch=18) +
-      # Splitting into metric subpanels
-      facet_wrap(~ amplitude * bandwidth, 
-                 scales = "free_y", ncol = 3,
-                 labeller = \(x) label_both(x, multi_line = TRUE, sep = ": ")) +
-      theme_minimal() +
-      scale_color_brewer(palette = "Set2") + 
-      labs(
-        x = "",
-        y = metrx,
-        # title = glue("Metric Performance Across {N_EXPERIMENTS} Iterations")
+    p <- ggplot(eval_long %>% filter(metric == metrx) %>%
+                  mutate(`relative length` = scales::percent(`relative length`)),
+                aes(x = method, y = value, color = method)) +
+      geom_jitter(width = 0.125, alpha = 0.7, size = 1.25) + 
+      stat_summary(fun = mean, geom = "point", color = "black", size = 2, pch = 18) +
+      facet_wrap(
+        ~ `signal strength` * `relative length`, 
+        scales = "free_y", ncol = 3,
+        labeller = \(x) label_both(x, multi_line = TRUE, sep = ": ")
       ) +
+      theme_minimal(base_family = "Arial", base_size = 6) +
+      scale_color_manual(values = method_cols) +
+      scale_x_discrete(
+        # 1. Shrink outer padding around the first and last x categories
+        expand = expansion(add = c(0.3, 0.3)),
+        labels = function(x) str_wrap(x, width = 10)
+      ) +
+      labs(x = NULL, y = metrx) +
       theme(
         panel.grid = element_blank(),
-        axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1, size = 8),
-        axis.text.y = element_text(vjust = 1, hjust = 1, size = 8),
+        
+        # Add border around each subpanel to create a grid between them
+        panel.border = element_rect(color = "grey80", fill = NA, linewidth = 0.5),
+        
+        # 2. Controls panel width-to-height ratio: taller panels pull x-coordinates closer together
+        aspect.ratio = 1.1,
+        
+        # 3. Tighten distance from plot border to x tick labels
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 6, 
+                                   margin = margin(t = 2, unit = "pt")),
+        axis.ticks.length.x = unit(2, "pt"),
+        
+        # 4. Tighten y-axis text/tick margins to minimize the gap between facet columns
+        axis.text.y = element_text(vjust = 0.5, hjust = 1, size = 6, 
+                                   margin = margin(r = 1, unit = "pt")),
+        axis.ticks.length.y = unit(2, "pt"),
+        
         legend.position = "none",
-        strip.text = element_text(face = "plain", size = 8, 
-                                  margin = margin(t = 1, b = 1)),
-        panel.spacing.x = unit(0, "lines"),  # Horizontal space between columns
-        panel.spacing.y = unit(0, "lines"),   # Increased vertical space between rows
-        plot.margin = margin(t = 20, r = 20, b = 30, l = 20, unit = "pt") 
-      ) + scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 10))
+        strip.text = element_text(face = "plain", size = 6, margin = margin(t = 1, b = 1)),
+        
+        # 5. Inter-panel spacing
+        panel.spacing.x = unit(5, "pt"),
+        panel.spacing.y = unit(5, "pt"),
+        plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt")
+    )
     
-    
-    ggsave(plot = p, filename = glue('testing/figs/{metrx}_evaluation.pdf'), 
-           device = 'pdf', width = 8, height = 8, units = 'in')
+    print(p)
+    # Reduce output width from 5 to 4 to further compress x spacing across the 3 columns
+    ggsave(
+      plot = p, 
+      filename = glue('testing/figs/{metrx}_evaluation.pdf'), 
+      device = 'pdf', 
+      width = 4, 
+      height = 4.5, 
+      units = 'in'
+    )
     
   }
+  
 }

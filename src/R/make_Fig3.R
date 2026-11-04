@@ -19,40 +19,38 @@ print(funGP_res)
 #============================================================
 #============================================================
 h_thresh <- log2(1.5); v_thresh <- -log10(0.05)
-p <- funGP_res %>% mutate(status = case_when(
-  neglogp > v_thresh & directed_deviation > h_thresh ~ 'Upreg',
-  neglogp > v_thresh & directed_deviation < -h_thresh ~ 'Downreg',
-  TRUE ~ 'NS'
-)) %>% arrange(status == 'Not Significant') %>%
+p <- funGP_res %>% 
+  mutate(status = case_when(
+    neglogp > v_thresh & directed_deviation > h_thresh ~ 'Upreg',
+    neglogp > v_thresh & directed_deviation < -h_thresh ~ 'Downreg',
+    TRUE ~ 'NS'
+  )) %>% 
+  arrange(status == 'NS') %>%
   ggplot(aes(x = directed_deviation, y = neglogp)) +
-  # 1. Plot points with grey color and 25% alpha transparency
-  geom_point(aes(color = status, alpha = status, size = polarity),  shape = 20) +
-  scale_color_manual( name = bquote(Delta * " abundance"),
-                      values = c(
-                        "Upreg" = "#e41a1c",   # Professional Red
-                        "Downreg" = "#377eb8",  # Professional Blue
-                        "NA" = "gray70"     # Muted Gray
-                      )
-  ) + scale_alpha_manual(name = "", 
-                          guide = "none",
-                          values = c(
-                            "Upreg" = .5,   # Professional Red
-                            "Downreg" = .5,  # Professional Blue
-                            "NS" = .1     # Muted Gray
-                          )) + 
+  geom_point(aes(color = status, alpha = status, size = polarity), shape = 20) +
+  scale_color_manual(
+    name = bquote(Delta * " abundance"),
+    values = c(
+      "Upreg" = "#e41a1c",
+      "Downreg" = "#377eb8",
+      "NS" = "gray70"
+    )
+  ) + 
+  scale_alpha_manual(
+    name = "", 
+    guide = "none",
+    values = c("Upreg" = 0.5, "Downreg" = 0.5, "NS" = 0.1)
+  ) + 
   scale_size_continuous(
     name = 'Polarity',
-    range = c(1, 7.5),
-    # breaks = waiver(),
-    # labels = waiver(),
+    range = c(.25, 4),
     limits = c(0.5, 1),
     trans = "identity"
   ) + 
   geom_text_repel(
-    data = . %>% arrange(desc(stats), desc(directed_deviation)), #%>%
-      # {bind_rows(slice_head(., n=5), slice_tail(., n=5))},
+    data = . %>% arrange(desc(stats), desc(directed_deviation)),
     aes(label = feature),
-    size = 8 / .pt,
+    size = 6 / .pt,
     family = 'Arial',
     color = "black",
     box.padding = 0.25,
@@ -60,48 +58,55 @@ p <- funGP_res %>% mutate(status = case_when(
     segment.color = "gray", 
     max.overlaps = 20
   ) +
-  # 2. Horizontal significance threshold line: -log10(0.05) ~ 1.301
-  geom_hline(yintercept = v_thresh, color = "red", linetype = "dashed", linewidth = .75) +
-  # 3. Vertical effect size threshold lines
-  geom_vline(xintercept = c(-h_thresh, h_thresh), color = "red", linetype = "dashed", linewidth = .75) +
-  # 4. Axis Labels
+  geom_hline(yintercept = v_thresh, color = "red", linetype = "dashed", linewidth = 0.5) +
+  geom_vline(xintercept = c(-h_thresh, h_thresh), color = "red", linetype = "dashed", linewidth = 0.5) +
   labs(
     x = "Max directed deviation",
-    y = expression(-log10~" analytic pvalue")
+    y = expression(-log[10]~" analytic p-value")
   ) + 
-  # scale_y_log10() + 
-  # 5. Clean, professional theme minimalization
-  theme_bw(base_family = 'Arial', 
-           base_size = 12) +
+  theme_bw(base_family = 'Arial', base_size = 8) +
   theme(
+    text = element_text(family = 'Arial', size = 8),
+    axis.title = element_text(family = 'Arial', size = 8),
+    axis.text = element_text(family = 'Arial', size = 8),
     panel.grid.major = element_blank(), 
     panel.grid.minor = element_blank(),
-    axis.title = element_text(size = 8),
-    axis.text = element_text(size=8),
-  ) + theme(
-    legend.position = "right", 
-    plot.margin = margin(t = 2, r = 2, b = 2, l = 2, unit = "pt"),
+    
+    # Legend layout & compact vertical spacing
+    legend.position = "right",
+    legend.box = "vertical",
+    legend.title = element_text(family = 'Arial', size = 8),
+    legend.text = element_text(family = 'Arial', size = 8),
+    
+    # Compress key height and vertical spacing between rows
+    legend.key.width   = unit(3.0, "mm"),
+    legend.key.height  = unit(2.5, "mm"),
+    legend.key.spacing.y = unit(0, "pt"),     # ggplot2 >= 3.5.0
+    legend.spacing.y   = unit(2, "pt"),       # Gap between color & size boxes
+    
     legend.margin = margin(0, 0, 0, 0, unit = "pt"),
     legend.box.margin = margin(0, 0, 0, 0, unit = "pt"),
     legend.box.spacing = unit(3, "pt"),
-    
-    # legend.title = element_text(size = 12, face = "bold"), # Title font size
-    legend.text = element_text(size = 8),
-    legend.box = "vertical",
-    legend.key.size = unit(3, "mm")                 # Shrinks the color boxes
+    plot.margin = margin(t = 2, r = 2, b = 2, l = 2, unit = "pt")
   ) + 
   guides(
-    color = guide_legend(order = 1,override.aes = list(size = 5, alpha = 1)), 
-    size  = guide_legend(order = 2)) +
+    color = guide_legend(
+      order = 1,
+      keyheight = unit(2, "mm"),
+      override.aes = list(size = 3.5, alpha = 1)
+    ), 
+    size = guide_legend(
+      order = 2,
+      keyheight = unit(2, "mm")             # Locks row height for large points
+    )
+  ) +
   scale_x_continuous(expand = expansion(mult = c(0.15, 0.15))) +
-  # scale_y_continuous(
-  #   expand = expansion(mult = c(0.025, 0.15))) +
   coord_cartesian(clip = "off")
 
 print(p)
 
 ggsave(plot = p, filename = glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}_N_{N_BINS}_abundance_volcano.pdf'),
-       width = 4.5, height = 3.5, units = 'in')
+       width = 4, height = 3, units = 'in')
 
 #============================================================
 #============================================================
