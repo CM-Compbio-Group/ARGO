@@ -62,7 +62,7 @@ top_anno <- HeatmapAnnotation(
   annotation_name_gp = gpar(fontsize = 8, fontfamily = 'Arial') 
 )
 
-pdf(glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}_FC_heatmap.pdf'), width = 3.5, height =2.5)
+pdf(glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}__w_donor_FC_heatmap.pdf'), width = 3.5, height =2.5)
 Heatmap(stat_lfc, cluster_columns = F, name = "delta_expression",
         show_row_names = F,
         show_column_names = F, 

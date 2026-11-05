@@ -59,7 +59,12 @@ metrics <- metrics %>% bind_rows(despace_auprc %>%
 
 metrics <- metrics %>% right_join(rel_length, by = 'bandwidth') %>%
               mutate(across(`relative length`, ~ round(., 3))) %>% 
-              dplyr::rename(`signal strength` = amplitude)
+              dplyr::rename(`signal strength` = amplitude) %>% 
+  dplyr::rename(RL = `relative length`,
+                SS = `signal strength`)  %>% 
+  mutate(RL = factor(RL), 
+         SS = factor(SS)) 
+
 
 
 method_cols <- c(
@@ -77,13 +82,24 @@ metrics <- metrics %>% mutate(method = fct_relevel(method,
                                        "SPADE", "DESeq2", "edgeR", "Limma", 
                                        "DESpace", "tradeSeq", "Lamian", "ARGO"))
 
+
+write_rds(metrics, 'testing/output/auprc_metrics_w_spade.rds')
+
 ## drop spade, rename despace 
 metrics <- metrics %>% filter(method != 'SPADE') %>%
           mutate(method = fct_recode(method, 'DESpace2' = 'DESpace'))
 metrics$method <- droplevels(metrics$method)
 
-p <- ggplot(metrics %>%
-              mutate(`relative length` = scales::percent(`relative length`)),
+metrics <- metrics %>% dplyr::rename(RL = `relative length`,
+                                     SS = `signal strength`) %>% 
+  mutate(RL = factor(RL), 
+         SS = factor(SS)) 
+
+  
+# metrics %>%
+#   mutate(`RL` = scales::percent(`RL`))
+
+p <- ggplot(metrics,
             aes(x = method, y = auprc, color = method)) +
   geom_jitter(width = 0.125, alpha = 0.7, size = 1.25) + 
   stat_summary(fun = mean, geom = "point", color = "black", size = 2, pch = 18) +
@@ -93,10 +109,10 @@ p <- ggplot(metrics %>%
   #   labeller = label_both
   # ) + 
   facet_wrap(
-    ~ `signal strength` * `relative length`,
+    ~ `SS` * `RL`,
     scales = "free_y",
     ncol = 3,
-    labeller = \(x) label_both(x, multi_line = T, sep = ": ")
+    labeller = \(x) label_both(x, multi_line = F, sep = ": ")
   ) +
   theme_minimal(base_family = "Arial", base_size = 6) +
   scale_color_manual(values = method_cols) +
@@ -126,16 +142,20 @@ p <- ggplot(metrics %>%
     # 5. Inter-panel spacing
     panel.spacing.x = unit(5, "pt"),
     panel.spacing.y = unit(5, "pt"),
-    plot.margin = margin(t = 0, r = -4, b = 0, l = -4, unit = "pt")
+    plot.margin = margin(t = 0, r = 2, b = 0, l = 2, unit = "pt")
   )
 
 print(p)
 # Reduce output width from 5 to 4 to further compress x spacing across the 3 columns
 ggsave(
   plot = p, 
-  filename = glue('testing/figs/auprc_evaluation_wo_spade.pdf'), 
+  filename = glue('testing/figs/auprc_evaluation_w_spade.pdf'), 
   device = 'pdf', 
   width = 4.5, 
   height = 4.5, 
   units = 'in'
 )
+
+
+
+write_rds(metrics, 'testing/output/auprc_metrics_wo_spade.rds')

@@ -22,6 +22,25 @@ print(funGP_res)
 
 #============================================================
 #============================================================
+## i want confidence bands
+data_env$CONTRAST <-  'adult_vs_juvenile'
+data_env$CONTRAST_VECTOR <- c(-1, 1,0)
+data_env$features_to_fit <- c('Olig-1','Olig-2','Olig-3')
+data_env$kernel_params <- res.ARGO$params
+data_env$GET_POSTERIOR <- FALSE
+data_env$PLOT_POSTERIOR <- FALSE
+data_env$PLOT_CONF_BANDS <- TRUE
+data_env$RETURN_FITS <- FALSE
+
+ci_plots <- fit_ARGO(data_env)
+for(fx in data_env$features_to_fit){
+  message(fx)
+  ggsave(plot = ci_plots[[fx]], filename = glue('figs/{data_env$CONTRAST}_{fx}_ci.pdf'), 
+         width=2.5, height=1.5, units='in')
+}
+
+#============================================================
+#============================================================
 h_thresh <- log2(1.5); v_thresh <- -log10(0.05)
 p <- funGP_res %>% mutate(status = case_when(
   -log10(fdr) > v_thresh & directed_deviation > h_thresh ~ 'Upreg',

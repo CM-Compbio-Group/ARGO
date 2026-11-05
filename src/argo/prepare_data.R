@@ -126,16 +126,33 @@ data_env$n_monte_carlo_simulations = 1000 # no.of monte carlo samples
 data_env$features_to_fit <- colnames(bin_cts)
 data_env$test_coords <- NULL
 data_env$kernel_params <- NULL
+data_env$GET_POSTERIOR <- FALSE
 data_env$PLOT_POSTERIOR <- FALSE
 data_env$PLOT_CONF_BANDS <- FALSE
 data_env$RETURN_FITS <- TRUE
 
 write_rds(data_env, file = 'output/expression_data_env.rds')
+# res.ARGO <- fit_ARGO(data_env)
+
+
 #============================================================
-## read downstream functions
+## timed run
 #============================================================
+
+data_env <- read_rds('output/expression_data_env.rds')
+data_env$GET_POSTERIOR <- FALSE
+data_env$RETURN_FITS <- TRUE
+data_env$FIT_DONOR<-TRUE
+data_env$features_to_fit <- colnames(data_env$counts)
+
+start_time <- Sys.time()
 res.ARGO <- fit_ARGO(data_env)
-write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_N30_wo_donor_diff_testing.rds'))
+end_time <- Sys.time()
+difftime(end_time, start_time)
+
+print(glue('Time taken to run with N={data_env$N} is:{difftime(end_time, start_time, units = "secs")}'))
+write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_N30_w_donor_diff_testing.rds'))
+
 #=====================================================
 funGP.df <- res.ARGO$resObjects %>%
   map_dfr(`[`, c('neglogp', 'deviation'), .id = 'gene') %>%
@@ -189,5 +206,3 @@ p <- ggplot(dot_df, aes(x = sample_id, y = factor(gene, levels = rev(genes_to_pl
 
 ggsave(plot=p, filename = 'figs/top_diff_dotplot.pdf', width = 10, height = 6)
 
-# data_env <- read_rds('output/expression_data_env.rds')
-# res.ARGO <- read_rds('output/old_vs_adult_N30_diff_testing_results.rds')

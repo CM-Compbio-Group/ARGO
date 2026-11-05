@@ -60,7 +60,11 @@ plot_CI_bands <- function(feature, res, argo_env){
         plot.title = element_text(size = 8, face = "plain", hjust = 0.5),
         axis.title = element_text(size = 8, face = "plain"),
         axis.text = element_text(size = 8, face = "plain"),
-        legend.position = "bottom"
+        legend.position = "bottom",
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0, unit = "pt"),
+        # Uses a negative top margin to pull the legend up toward the plot
+        legend.box.margin = margin(t = -8, r = 0, b = 0, l = 0, unit = "pt"),
+        plot.margin = margin(t = 0.5, r = 2, b = 0.5, l = 2, unit = "pt")
       )
     
     

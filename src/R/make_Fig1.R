@@ -109,7 +109,7 @@ p <- funGP_res %>%
 
 print(p)
 
-ggsave(plot = p, filename = glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}_volcano.pdf'),
+ggsave(plot = p, filename = glue('figs/{data_env$KERNEL}_{data_env$CONTRAST}_w_donor_volcano.pdf'),
        width = 3.5, height = 2.5, units = 'in')
 
 
@@ -135,12 +135,22 @@ require(readxl)
 require(UpSetR)
 library(PRROC)
 
+
 res.list <- read_rds(glue('output/{data_env$CONTRAST}_DGE_results_list.rds'))
 res.list$ARGO <- funGP_res %>% dplyr::rename(gene = feature)
+res.despace <- read.table("/Volumes/umms-congma1/users/congma/Codes/spatial_comparison/results/merfish_DESpace/DESpace_overall.tsv", 
+                      sep = '\t')
+names(res.despace)
+res.list$DESpace2 <- res.despace %>% dplyr::rename(gene=gene_id, 
+                                                       fdr = FDR,
+                                                       pvalue=PValue) %>%
+  mutate(neglogp = -log(pvalue))
+sapply(res.list, names)
 
 res.sig <- lapply(res.list, function(res) filter(res, fdr < 0.05) %>% pull(gene))
 names(res.sig) <- sprintf("  %-10s", names(res.sig))
 sapply(res.sig, length)
+
 
 pdf('figs/upsetPlot_FDR_05.pdf', width = 3, height = 2.5)
 theme_set(theme_gray(base_family = "Arial", 
@@ -158,14 +168,6 @@ print(
     
     # Allocates clean vertical room between top bars and bottom matrix
     mb.ratio = c(0.65, 0.35),
-    
-    # text.scale order:
-    # 1: Intersection size bar numbers (top)
-    # 2: Intersection size axis title (Y-axis)
-    # 3: Set size bar labels (numbers on bars)
-    # 4: Set size axis title (X-axis)
-    # 5: Set names (rows on grid) -> slightly smaller helps prevent clipping
-    # 6: Numbers above intersection bars
     text.scale = c(0.75, 0.7, 0.45, 0.6, 0.65, 0.75)
   ), 
   newpage = FALSE
@@ -201,3 +203,87 @@ Heatmap(stat_lfc[res$feature, ], cluster_columns = F,
           labels_gp = gpar(fontsize = 8, fontfamily = "Arial")
         ))
 dev.off()
+
+#============================================================
+#============================================================
+gt.sziraki <- read_xlsx('data/sheets/Sziraki.xlsx', sheet = 9, skip = 1)
+gt.sziraki <- na.omit(unique(gt.sziraki$`Gene name`))
+dataset <- list('Sziraki et al' = gt.sziraki)
+STATISTIC <- 'PR'
+compute_ranked_auprc <- function(ranked_list, signature, STATISTIC){
+  binary_labels <- ranked_list %in% signature
+  scores <- (seq(length(ranked_list), 1))
+  pg_score <- scores[binary_labels]
+  ng_score <- scores[!binary_labels]
+  if(STATISTIC == 'PR'){
+    pr_obj <- pr.curve(scores.class0 = pg_score, scores.class1 = ng_score, curve = T)  
+  }else if(STATISTIC == 'ROC'){
+    pr_obj <- roc.curve(scores.class0 = pg_score, scores.class1 = ng_score, curve = T)
+  }
+  return(pr_obj)
+}
+
+method_cols <- c(
+  "ARGO"     = "orchid4",
+  "DESeq2"   = "#bebada",
+  "edgeR"    = "#8dd3c7",
+  "Limma"    = "lightskyblue2",
+  "Lamian"   = "lightgreen",
+  "tradeSeq" = "lightpink2", 
+  'DESpace2' = 'gold2'
+)
+
+## loop through genesets and gather AUPRC curves across methods
+for(study in c('Sziraki et al')){
+  message(study)
+  markers <- dataset[[study]]
+  pr.curves <- lapply(names(method_cols), function(method) {
+    compute_ranked_auprc(res.list[[method]] %>% arrange(desc(neglogp)) %>% pull(gene),
+                         signature = markers, 
+                         STATISTIC = STATISTIC)
+    }
+  )
+  names(pr.curves) <- names(method_cols)
+  
+  pdf(glue('figs/{STATISTIC}_{study}_lines.pdf'), width = 3, height = 3)
+  par(mfrow = c(1,1), 
+      mar = c(2.5, 2.5, .75, 1) + 0.1, 
+      mgp = c(1.2, 0.4, 0),
+      family = 'Arial', ps=8)
+  
+  plot(pr.curves[[1]], col = adjustcolor(method_cols[1], alpha.f = 1), 
+       main = glue("{study}", line=.5), 
+       auc.main = F, 
+       lty=1, lwd = 2.5,
+       cex.main = 1.25,  
+       cex.lab  = 1,  
+       cex.axis = 1)
+  
+  ## plot other curves
+  for(method in names(method_cols)[2:7]){
+    plot(pr.curves[[method]], col = adjustcolor(method_cols[method], alpha.f = .5),
+         lty = 1, lwd = 1, add = TRUE)
+  }
+
+  # make legends
+  lgx <- paste("ARGO (AUPRC = ", round(pr.curves[['ARGO']]$auc.integral, 3), ")")
+  for(method in names(method_cols)[2:7]){
+      lgx <- c(lgx, 
+               glue("{method} (AUPRC = {round(pr.curves[[method]]$auc.integral, 3)}) ")
+      )
+  }
+
+  legend("topright", 
+         cex=.75,
+         legend = lgx, 
+         text.font = 1,
+         col = cols, 
+         lty = c(1, rep(1,5)),
+         lwd = 2,             # Line width
+         bty = "n",
+         y.intersp = 0.65,
+         seg.len = 1.5)   
+  
+  dev.off()
+}
+
