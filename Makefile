@@ -1,4 +1,4 @@
-.PHONY: all setup simulate analyze plot
+.PHONY: all setup simulate analyze plot clean
 
 # set up computational environment 
 setup: .setup_complete
@@ -30,4 +30,5 @@ plot: .plotting_complete
 	Rscript testing/src/scripts/plot_results.R
 	touch .plotting_complete
 
- 
+clean:
+	rm .setup_complete ._simulation_complete .analyze_complete .plotting_Complete testing/output/*.rds testing/figs/*.pdf testing/data/temp/*.rds

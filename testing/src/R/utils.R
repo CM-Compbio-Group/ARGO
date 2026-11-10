@@ -165,7 +165,6 @@ run_lamian <- function(env){
       dplyr::rename(fdr = fdr.chisq.overall) %>% 
       arrange(desc(neglogp)) %>% 
       mutate(Rank = row_number())
-    # print(res.lamian %>% filter(neglogp > -log(.05)) %>% with(table(gene %in% null_genes)))
     return(res.lamian)
   })
   
@@ -223,11 +222,10 @@ run_limma <- function(env){
       res.list[[ctx]] <- topTable(fit_ebayes, coef = 1, n = Inf, sort.by = "none")
     }
     
-    p.vals <- do.call(cbind, lapply(res.list, function(res) res[genes, 'P.Value']))
-    return(p.vals)
-    # res.limma <- summarize_dge_results(res.list, rownames(Y$counts), 
-    #                                    pval = 'P.Value', lfc = 'logFC')[['dge']]
-    # return(res.limma)
+    
+    res.limma <- summarize_dge_results(res.list, rownames(Y$counts),
+                                       pval = 'P.Value', lfc = 'logFC')[['dge']]
+    return(res.limma)
   })
 }
 
@@ -258,11 +256,9 @@ run_edger <- function(env){
       res.list[[ctx]] <- topTags(qlf, n = Inf, sort.by = "none")$table
     }
 
-    p.vals <- do.call(cbind, lapply(res.list, function(res) res[genes, 'PValue']))
-    return(p.vals)
-    # res.edger <- summarize_dge_results(res.list, genes = rownames(Y$counts), 
-    #                                    pval = 'PValue', lfc = 'logFC')[['dge']]
-    # return(res.edger) 
+    res.edger <- summarize_dge_results(res.list, genes = rownames(Y$counts),
+                                       pval = 'PValue', lfc = 'logFC')[['dge']]
+    return(res.edger)
   })
 }
 
@@ -282,12 +278,9 @@ run_deseq <- function(env){
                                                   paste('condition_A', ctx, sep='_')))
     }
     
-    p.vals <- do.call(cbind, lapply(res.list, function(res) res[genes, 'pvalue']))
-    return(p.vals)
-    
-    # res.deseq <- summarize_dge_results(res.list, genes = rownames(dds), 
-    #                                    pval = 'pvalue', lfc = 'log2FoldChange')[['dge']]
-    # return(res.deseq)
+    res.deseq <- summarize_dge_results(res.list, genes = rownames(dds),
+                                       pval = 'pvalue', lfc = 'log2FoldChange')[['dge']]
+    return(res.deseq)
   })
   
 }

@@ -1,6 +1,11 @@
-#' read the DGE testing evaluation metrics and make figures
+#' read the DGE testing evaluation metrics and make boxplots of AUPRC values and F1 scores for each method
+#' and save PDF files to folder 'testing/figs/'
 
+suppressMessages({
+  source('testing/src/scripts/00_load_packages_and_functions.R')
+})
 
+expt_df <- vroom::vroom('testing/data/temp/experiment_params.csv')
 eval.metrics <- read_rds('testing/output/diff_testing_eval_metrics.rds')
 metrics <- do.call(rbind, eval.metrics)
 method <- rownames(metrics)
@@ -22,7 +27,6 @@ for(metrx in c('AUPRC', 'F1')){
   p <- ggplot(eval_long %>% filter(metric == metrx), aes(x = method, y = value, color = method)) +
     # Scales the 10 iterations tightly within each of the 7 method columns
     geom_jitter(width = 0.15, alpha = 0.7, size = 1.8) + 
-    # ylim(c(0, 1)) + 
     # Adds a clear center-point for the mean
     stat_summary(fun = mean, geom = "point", color = "black", size=3, pch=18) +
     # Splitting into metric subpanels
@@ -33,7 +37,6 @@ for(metrx in c('AUPRC', 'F1')){
     labs(
       x = "",
       y = metrx,
-      # title = glue("Metric Performance Across {N_EXPERIMENTS} Iterations")
     ) +
     theme(
       panel.grid = element_blank(),
