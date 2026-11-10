@@ -41,11 +41,12 @@ run_differential_testing <- function(expt = 1, N = 25, dataset = 'PANCREAS'){
     warning('Bins might be too sparse. Consider lowering N')
   }
   
-  stopifnot("input file not found" = file.exists(glue('testing/data/10_20/{dataset}_expt_{expt}.rds')))
+  stopifnot("input file not found" = file.exists(glue('testing/data/temp/{dataset}_expt_{expt}.rds')))
   
   message(glue('Running testing for Experiment {expt}'))
   # read simulated data for this experiment iteration and unload the list into variables
-  zeallot::`%<-%`(c(sim_counts, sim_meta, effect_genes, null_genes, .), read_rds(glue('testing/data/10_20/{dataset}_expt_{expt}.rds')))
+  zeallot::`%<-%`(c(sim_counts, sim_meta, effect_genes, null_genes, .), 
+                  read_rds(glue('testing/data/temp/{dataset}_expt_{expt}.rds')))
   
   # get metadata for different scales of data representation
   zeallot::`%<-%`(c(cell_level_meta, bin_level_meta, sample_level_meta, cell_type_meta), prepare_metadata(sim_meta, N))
@@ -64,7 +65,8 @@ run_differential_testing <- function(expt = 1, N = 25, dataset = 'PANCREAS'){
   # normalize counts using DESeq variance stabilizing transform
   # append centered, normalized counts to metadata object to use with fitting
   argo.input <- bin_level_meta %>%
-    bind_cols(scale(t(varianceStabilizingTransformation(t(binned_counts))), center = T, scale = F))
+                bind_cols(scale(t(varianceStabilizingTransformation(t(binned_counts))),
+                                center = T, scale = T))
   
   
   # list of different baseline testing methods for benchmarking
@@ -85,10 +87,10 @@ run_differential_testing <- function(expt = 1, N = 25, dataset = 'PANCREAS'){
   res.list <- map(diff.testing.methods, ~ .x(env))
   
   ## run differential testing with ARGO using RBF kernels
-  res.list[['argo_shared_noise']] <- run_argo(env, bin_meta = argo.input, FIT_CONDITIONAL_NOISE = FALSE)
+  # res.list[['argo_shared_noise']] <- run_argo(env, bin_meta = argo.input, FIT_CONDITIONAL_NOISE = FALSE)
   res.list[['argo_conditional_noise']] <- run_argo(env, bin_meta = argo.input, FIT_CONDITIONAL_NOISE = TRUE)
   
-  write_rds(res.list, glue('testing/output/10_20/Expt_{expt}_results.rds'))
+  write_rds(res.list, glue('testing/output/temp/Expt_{expt}_results.rds'))
   #===================================================================
   ## evaluate performance of different testing algorithms
   #===================================================================

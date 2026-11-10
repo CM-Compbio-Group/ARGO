@@ -40,7 +40,7 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
   
   zeallot::`%<-%`(c(sce, sce.dat, sce.copula, sce.para), sce_fits) #unlist learned variables for dataset
   
-  N_SAMPLES <- 1
+  
   N_TOTAL <- 2*N_SAMPLES
   ## sample genes to include in experiment
   effect_genes <- sample(rownames(sce), size = N_GENES, replace = T)
@@ -64,15 +64,6 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
   sce <- sce[effect_genes, ]
   rownames(sce) <- unique_effect_genes
   
-  #====================================
-  ## identify null and effect genes
-  #====================================
-  lfc_mat <- matrix(
-    0,
-    nrow = nrow(mu_A),
-    ncol = ncol(mu_A),
-    dimnames = dimnames(mu_A)
-  )
   
   #====================================
   # compute effects
@@ -88,6 +79,16 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
   
   print(table(effect_info$amplitude, effect_info$bandwidth))
   
+  #====================================
+  ## identify null and effect genes
+  #====================================
+  lfc_mat <- matrix(
+    0,
+    nrow = ncol(sce),
+    ncol = length(effect_genes),
+    # dimnames = dimnames(mu_A)
+  )
+  
   ## inject perturbations on mean parameter
   for (j in seq_along(effect_genes)) {
     lfc_mat[, j] <-
@@ -101,12 +102,12 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
   ## visualize the perturbation map
   # pheatmap(lfc_mat[ord, ], use_raster=FALSE, cluster_rows = F, show_rownames = F, show_colnames = F, name = 'effect size')
   
-  ## for every gene, store the interval with non-zero deviation
-  thresh = 0.1
+  ## for every gene, store the interval with over 1% deviation
+  thresh = 0.2
   lower_time_bound <- apply(lfc_mat, 2, function(z) min(t_[abs(z) > thresh])) # min time point where absolute lfc exceeds threshold
   upper_time_bound <- apply(lfc_mat, 2, function(z) max(t_[abs(z) > thresh]) ) # upper bound of interval
-  effect_info <- effect_info %>% mutate(interval_left_01 = lower_time_bound, 
-                         interval_right_01 = upper_time_bound)
+  effect_info <- effect_info %>% mutate(interval_left = lower_time_bound, 
+                         interval_right = upper_time_bound)
   
   ## compute the new mean parameter with these effects
   mu_B <- mu_A * exp(lfc_mat)
@@ -127,8 +128,13 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
              filtered_gene = sce.dat$filtered_gene)
   }
   
-  counts_A <- generate_counts(mu_A)
-  counts_B <- generate_counts(mu_B)
+  counts_A <- vector("list", N_SAMPLES)
+  counts_B <- vector("list", N_SAMPLES)
+  
+  for(r in seq_len(N_SAMPLES)){
+    counts_A[[r]] <- generate_counts(mu_A)
+    counts_B[[r]] <- generate_counts(mu_B)
+  }
   
   #===================================================================
   ## save counts matrix to memory
@@ -137,14 +143,20 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
   sim_meta <- tibble(cell_id = rep(colnames(sce), N_TOTAL),
                          condition = factor(rep(c('condition_A', 'condition_B'), 
                                                 each = N_SAMPLES * ncol(sce))),
-                         sampleID = rep(factor(paste('sample', LETTERS[1:N_TOTAL], sep = '-')), 
+                         replicate = rep(factor(rep(paste('replicate', 1:N_SAMPLES, sep = '_'), 
+                                                each = ncol(sce))), 2),
+                         sampleID = rep(factor(paste('sample', LETTERS[1:N_TOTAL], sep = '_')), 
                                         each = ncol(sce)),
                          pseudotime = rep(sce.dat$dat$pseudotime, N_TOTAL), 
                          cell_type = rep(sce$cell_type, N_TOTAL)) %>% as_tibble()
   
+  
+  
+  
   sim_meta <- sim_meta %>% mutate(cell_id = paste(sampleID, cell_id, sep = '_'))
-  sim_counts <- as(cbind(counts_A, counts_B), 'sparseMatrix')
+  sim_counts <- as(do.call(cbind, c(counts_A, counts_B)), 'sparseMatrix')
   colnames(sim_counts) <- sim_meta$cell_id
+  
   stopifnot(!any(is.na(sim_counts)))
   print(glue("size of generated counts data is {nrow(sim_counts)}"))
   
@@ -152,6 +164,6 @@ generate_interval_perturbation <- function(sce_fits = list(), N_GENES = 1000, N_
                  meta = sim_meta, 
                  genes = effect_genes, 
                  effect_info = effect_info),
-            file = glue('testing/data/temp/{dataset}_interval_perturbation.rds'))
+            file = glue('testing/data/temp/{dataset}_w_replicates_interval_perturbation.rds'))
   
 }

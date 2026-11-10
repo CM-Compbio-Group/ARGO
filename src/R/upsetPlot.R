@@ -15,8 +15,6 @@ calculated_top_height = export_height * top_bars_fraction
 mat = list_to_matrix(res.sig)
 m = make_comb_mat(mat)
 
-# 2. Get the full descending order indices based on size
-ordered_set_indices = order(set_size(m_subset), decreasing = FALSE)
 
 
 full_order = order(comb_size(m), decreasing = TRUE)
@@ -27,11 +25,14 @@ set_bars_proportion = 0.35  # The left bar plot will take up 35% of the total la
 
 
 # 3. Subset the matrix to ONLY keep the top 10 intersections
-m_subset = m[full_order[1:10]]
+m_subset = m[full_order[1:8]]
 size_top_nums  = 8   # Controls numbers above the top bars & top axis ticks
 size_top_title = 8   # Controls the vertical "Intersection size" axis title
 size_set_names = 8   # Controls the right set names ("tradeSeq", "ARGO", etc.)
 size_set_size_title = 8
+
+# 2. Get the full descending order indices based on size
+ordered_set_indices = order(set_size(m_subset), decreasing = FALSE)
 
 # 4. Create the UpSet layout object using the subsetted matrix
 p = UpSet(

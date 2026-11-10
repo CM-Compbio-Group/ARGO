@@ -88,9 +88,7 @@ prop <- abundance %>% select(grid_key, clust_annot, proportion) %>%
     names_sort = TRUE                # Alphabetize cell type columns
   ) %>% column_to_rownames('grid_key') %>% as.matrix()
 
-
-pheatmap(t(prop), cluster_cols = T)
-
+# pheatmap(t(prop), cluster_cols = T)
 #=============================
 # prepare bin level metadata
 #=============================
@@ -98,6 +96,84 @@ bin_meta <- obs %>% select(-c(cell_id, pseudotime, clust_annot)) %>%
   distinct() %>% arrange(grid_key)
 
 stopifnot('binned counts does not match with metadata' = all(rownames(prop) == bin_meta$grid_key))
+#===============================================
+# trends for olig state proportions across bins
+#===============================================
+## convert to mean scaled counts in each condition x bin 
+n_counts <- bin_meta %>% dplyr::count(condition_key)
+mean_abx <- rowsum(prop, bin_meta$condition_key) 
+## divide by frequency of condition key in bin_meta
+all(rownames(mean_abx) == n_counts$condition_key)
+mean_abx <- mean_abx / n_counts$n 
+mean_abx <- mean_abx %>% 
+  as.data.frame() %>% 
+  rownames_to_column('condition_key') 
+
+mean_abx <- pivot_longer(mean_abx, cols = -condition_key, 
+                         names_to = 'cell_type', 
+                         values_to = 'counts') %>% 
+  left_join(bin_meta %>% select(condition, coord_x, condition_key),
+            by = 'condition_key', multiple = 'first') %>% 
+  filter( cell_type %in% c("Olig-1", "Olig-2", "Olig-3")) %>% 
+  group_by(condition_key) %>%
+  mutate(total_frac = sum(counts)) %>%
+  ungroup()
+
+# pal43 <- colorRampPalette(RColorBrewer::brewer.pal(6, "Set2"))(3)
+# pal43 <- c('gray85', 'slategray', 'gray25')
+pal43 <- c('lightpink', 'palevioletred', 'violetred','darkred')
+
+p <- ggplot(mean_abx, aes(x = coord_x, 
+                          y = counts,  # Or n_cells
+                          color = cell_type, 
+                          group = cell_type)) +
+  geom_line(linewidth = .5, alpha = 0.75, linetype=2) +
+  geom_line(aes(x = coord_x, y = total_frac, 
+                color = "Total Fraction", group = 'condition_key'
+                ), 
+            linewidth = .5, alpha = 0.95, linetype = 2) +
+  facet_wrap(~ interaction(condition), 
+             scales = "free_y", ncol=1) +
+  labs(
+    # title = "Mean Cell Type countsortions vs. Isodepth Bins by Age",
+    x = "Isodepth", y = "Scaled Abundance",
+    color = "Cell Type") +
+  guides(color = guide_legend(nrow=2,
+    override.aes = list(
+      linewidth = rep(.75, 4), # Thicker for Total Fraction (last item)
+      linetype  = c(2, 2, 2, 2)             # Solid (1) for Total Fraction, Dashed (2) for others
+    )
+  )) +
+  scale_color_manual(values = pal43) +
+  theme_classic(base_family = 'Arial', 
+                base_size = 8) +
+  # guides(color = guide_legend(ncol = 3)) +  # Set number of columns
+  theme(
+        plot.margin = margin(t = 15, r = 15, b = 15, l = 15, unit = "pt"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "bottom", 
+        plot.title = element_text(size = 8, face = "plain", hjust = 0.5),
+        axis.title = element_text(size = 8, face = "plain"),
+        axis.text = element_text(size = 8, face = "plain"),
+        
+        strip.text = element_text(size = 8, face = "plain"), 
+        # strip.background = element_blank(),           # Optional: Cleans up facet header boxes
+        
+        # Legend text and title formatting
+        legend.title = element_text(size = 8, face = "plain"),
+        legend.text = element_text(size = 8, face = "plain"), 
+        legend.margin = margin(t = -3, r = 0, b = 0, l = 0), # Pulls legend closer to plot
+        legend.key.size = unit(3, "mm")                 # Shrinks the color boxes
+  ) + scale_y_continuous(
+    expand = expansion(mult = c(0.025, 0.15))) +
+  coord_cartesian(clip = "off") 
+
+print(p)
+
+ggsave(plot = p, filename = glue('figs/Olig_fractions.pdf'), 
+       width = 3.5, height =4, units = 'in')
+
+# write_rds(mean_abx, file = 'output/mean_olig_abundance.rds') # save to make the abundance polots 
 #====================================
 # filter out bins with high sparsity
 #====================================
@@ -159,7 +235,7 @@ stopifnot('counts matrix is not aligned with metadata' = all(rownames(prop) == b
 # center the abundance ata
 #============================================================
 prop <- scale(prop, center = T, scale = T)
-pheatmap(prop)
+# pheatmap(prop)
 
 plot(prop[, 'Olig-1']~ bin_meta$condition_key)
 plot(prop[, 'Olig-2']~ bin_meta$condition_key)
@@ -167,7 +243,6 @@ plot(prop[, 'Olig-3']~ bin_meta$condition_key)
 plot(prop[, 'Endo-1']~ bin_meta$condition_key)
 plot(prop[, 'Endo-3']~ bin_meta$condition_key)
 plot(prop[, 'Micro-3']~ bin_meta$condition_key)
-
 #============================================================
 
 #============================================================
@@ -198,34 +273,22 @@ data_env$test_coords <- NULL
 data_env$PLOT_POSTERIOR <- FALSE
 data_env$PLOT_CONF_BANDS <- FALSE
 data_env$RETURN_FITS <- TRUE
+# data_env$kernel_params <- NULL
 data_env$kernel_params <- res.ARGO$params # if my parameters are already fit, I don't want to fit likelihood again
 
 ## save variables to memory
 write_rds(data_env, file = 'output/abundance_data_env.rds')
 #============================================================
-data_env <- read_rds('output/abundance_data_env.rds')
-list2env(as.list(data_env), envir = globalenv())
-#============================================================
 ## source implementation modules
 #============================================================
-source('src/argo/fit_ARGO.R')
-source('src/R/nll_and_gradients.R')
-source('src/R/posterior_predictive_plots.R')
-source('src/R/contrast-test-with-funGP.R')
-source('src/R/generate_cc_matrix.R')
-source('src/R/compute_analytical_pvalue.R')
-source('src/R/derive_KLT_CI_bands.R')
-source('src/R/compute_exceedence_statistics.R')
-source('src/R/compute_exceedence_metrics.R')
-source('src/R/plot_conf_bands.R')
-
 res.ARGO <- fit_ARGO(data_env)
 write_rds(res.ARGO, file = glue('output/{data_env$CONTRAST}_diff_abundance_results.rds'))
 #============================================================
 ## visualize results
 #============================================================
 data_env$CONTRAST <- 'old_vs_adult'
-res.ARGO <- read_rds(glue('output/{data_env$CONTRAST}_diff_abundance_results.rds'))
+res.ARGO <- read_rds(glue('output/old_vs_adult_diff_abundance_results.rds'))
+
 ## compute exceedence metrics
 exc.metrics <- do.call('rbind', lapply(res.ARGO$resObjects, compute_exceedence_metrics, isodepth_))
 ## aggregate results from functional testing
@@ -255,7 +318,7 @@ plot(ggplot(funGP_res %>% arrange(desc(stats)), aes(x = Rank, y = stats)) +
   # Add the non-overlapping labels
   geom_text_repel(
     data = . %>% {bind_rows(slice_head(., n = 5), slice_tail(., n = 5))},
-    aes(label = gene),
+    aes(label = feature),
     size = 5, 
     family = 'Arial',
     color = "black",

@@ -89,6 +89,7 @@ sapply(roi_index, length)
 # points(simplex_df$simplex_LE, -band, col = 'red', pch = 20)
 # legend('topright', col = c('blue','red'), legend = c('statistic', 'conf band'), pch=20, cex=1.5, bty='n')
 # 
+state <- 'cProlifMetab'
 for(state in c('cMESAst','cMESHyp', 'cMESInf', 'cMESVasc', 'Synaptic')){
   message(state)
   p1 <- make_tern_plot(filter(bin_meta, condition == 'IDHmutant'), 'IDHmutant', state)
@@ -117,7 +118,7 @@ for(state in c('cMESAst','cMESHyp', 'cMESInf', 'cMESVasc', 'Synaptic')){
     ))
   
   # 3. Arrange using grid.arrange, which natively respects ggtern grobs
-  pdf(glue('figs/{state}_N25.pdf'), width = 8, height = 4)
+  pdf(glue('figs/{state}_{N_BINS}.pdf'), width = 8, height = 4)
   print(p_final)
   dev.off()
 }

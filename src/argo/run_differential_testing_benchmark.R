@@ -145,7 +145,7 @@ dev.off()
 # res.argo %>% arrange(desc(neglogp)) %>% filter(gene %in% genes & abs(deviation) > 1)
 
 
-dataset <- lapply(dataset, function(x) intersect(x, funGP.df$gene))
+dataset <- lapply(dataset, function(x) intersect(x, funGP_res$feature))
 sapply(dataset, length)
 
 STATISTIC <- 'PR'
@@ -163,71 +163,6 @@ compute_ranked_auprc <- function(ranked_list, signature, STATISTIC){
   return(pr_obj)
 }
 
-
-## loop through genesets and gather AUPRC curves across methods
-for(study in names(dataset)){
-  message(study)
-  markers <- dataset[[study]]
-  pr.curves <- lapply(res.list, function(df)  {
-    compute_ranked_auprc(df %>% arrange(desc(neglogp)) %>% pull(gene),
-                         signature = markers, 
-                         STATISTIC = STATISTIC)
-    }
-  )
-  
-  cols <- c(  "orchid4","#bebada", "#8dd3c7", 'lightskyblue2', 'lightgreen', 'lightpink2', 'lightsalmon')
-  
-  pdf(glue('figs/{STATISTIC}_{study}_lines.pdf'), width = 4, height = 4)
-  par(mfrow = c(1,1), 
-      mar = c(3.5, 3.5, 2, 1) + 0.1, 
-      mgp = c(1.2, 0.4, 0),
-      family = 'Arial', ps=8)
-  plot(pr.curves[['ARGO']], col = adjustcolor(cols[1], alpha.f = 1), 
-       main = glue("{study}"), 
-       auc.main = F, 
-       lty=1, lwd = 2.5,
-       cex.main = 1.25,  # 8pt Title
-       cex.lab  = 1,  # 8pt Axis Labels ("Recall", "Precision")
-       cex.axis = 1)
-  
-  ## plot other curves
-  for(ii in seq(1,5)){
-    method = names(pr.curves)[ii]
-    plot(pr.curves[[method]], col = adjustcolor(cols[ii + 1], alpha.f = .5),
-         lty = 1, lwd = 1, add = TRUE)
-  }
-  # make legends
-  if(STATISTIC == 'PR'){
-    lgx <- paste("ARGO (AUPRC = ", round(pr.curves[['ARGO']]$auc.integral, 3), ")")
-  }else if(STATISTIC == 'ROC'){
-    lgx <- paste("ARGO (AUROC = ", round(pr.curves[['ARGO']]$auc, 3), ")")
-  }
-  
-  for(method in names(pr.curves)[1:5]){
-    if(STATISTIC == 'PR'){
-      lgx <- c(lgx, 
-               glue("{method} (AUPRC = {round(pr.curves[[method]]$auc.integral, 3)}) ")
-      )
-    }else if(STATISTIC == 'ROC'){
-      lgx <- c(lgx, 
-               glue("{method} (AUROC = {round(pr.curves[[method]]$auc, 3)}) ")
-      )
-    }
-    
-    
-  }
-  legend("topright", 
-         cex=1,
-         legend = lgx, 
-         text.font = 1,
-         col = cols, 
-         lty = c(1, rep(1,5)),
-         lwd = 2,             # Line width
-         bty = "n")           # Removes the box border around the legend (optional)
-  
-  dev.off()
-  
-}
 
 
 

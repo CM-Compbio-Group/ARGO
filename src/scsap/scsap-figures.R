@@ -5,21 +5,69 @@ library(glue)
 library(tidyverse)
 library(scDesign3)
 library(patchwork)
+library(scater)
 
 dataset <- 'PANCREAS'
 sce <- read_rds(glue('testing/data/raw/{dataset}_sce.rds'))
 # add pseudotime bins to object
-sce$bin <- factor(ntile(sce$pseudotime, n = 50))
+# sce$bin <- factor(ntile(sce$pseudotime, n = 50))
 
-p1 <- plot_reduceddim(ref_sce = sce, 
-                sce_list = list(),
-                name_vec = 'Pseudotime',
-                assay_use = "logcounts", 
-                if_plot = TRUE, 
-                color_by = c("pseudotime"), 
-                n_pc = 20)[[2]]
+set.seed(42)
+sce <- runPCA(sce, exprs_values = "logcounts")
+plotPCA(sce)
 
-p2 <- plot_reduceddim(ref_sce = sce, 
+set.seed(44)
+sce <- runUMAP(sce, n_neighbors=15)
+plotUMAP(sce)
+
+p1 <- plotUMAP(sce, colour_by = "pseudotime") + 
+  scale_color_viridis_c(
+    option = "plasma",
+    name = "",
+    guide = guide_colorbar(
+      direction = "horizontal",
+      title.position = "left",
+      title.vjust = 0.8,
+      barheight = unit(0.08, "in"),
+      barwidth = unit(1.2, "in")
+    )
+  ) + 
+  theme_void(base_family = "Arial", base_size = 8) + 
+  theme(
+    text = element_text(family = "Arial", size = 8),
+    panel.grid = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(family = "Arial", size = 8),
+    legend.text = element_text(family = "Arial", size = 8),
+    legend.margin = margin(t = 2, r = 0, b = 0, l = 0, unit = "pt"),
+    legend.box.margin = margin(0, 0, 0, 0, unit = "pt")
+  )
+
+print(p1)  
+
+ggsave(plot = p1, filename = 'figs/pancreas_pseudotime.pdf', width = 2, height = 2, units='in')
+
+set.seed(146)
+p2 <- plotUMAP(sce, colour_by = "cell_type") + 
+  labs(color = 'Cell Type') + 
+  theme_void(base_family = "Arial", base_size = 8) + 
+  theme(
+    text = element_text(family = "Arial", size = 8),
+    panel.grid = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(family = "Arial", size = 8),
+    legend.text = element_text(family = "Arial", size = 8),
+    legend.margin = margin(t = 2, r = 0, b = 0, l = 0, unit = "pt"),
+    legend.box.margin = margin(0, 0, 0, 0, unit = "pt")
+  )+ guides(
+    color = guide_legend(nrow = 2, byrow = TRUE, title = "", 
+                         keyheight = unit(1, "mm")),
+  )
+  
+print(p2)
+ggsave(plot = p2, filename = 'figs/pancreas_celltype.pdf', width = 2, height = 2, units='in')
+
+plot_reduceddim(ref_sce = sce, 
                       sce_list = list(),
                       name_vec = 'Cell Type',
                       assay_use = "logcounts", 
@@ -27,7 +75,22 @@ p2 <- plot_reduceddim(ref_sce = sce,
                       color_by = c("cell_type"), 
                       n_pc = 20)[[2]] + 
   labs(color = 'Cell Type') + 
-  theme(legend.position = "right")
+  theme_void(base_family = "Arial", base_size = 8) + 
+  theme(
+    text = element_text(family = "Arial", size = 8),
+    panel.grid = element_blank(),
+    legend.position = "bottom",
+    legend.title = element_text(family = "Arial", size = 8),
+    legend.text = element_text(family = "Arial", size = 8),
+    legend.margin = margin(t = 2, r = 0, b = 0, l = 0, unit = "pt"),
+    legend.box.margin = margin(0, 0, 0, 0, unit = "pt")
+  ) + guides(
+    color = guide_legend(nrow = 2, byrow = TRUE, title = "", 
+                         keyheight = unit(1.5, "mm")),
+  )
+
+print(p2)
+
 
 p3 <- plot_reduceddim(ref_sce = sce, 
                       sce_list = list(),

@@ -28,7 +28,7 @@ library(futurize)
 
 ## for fitting scDesign and simulating data
 source('testing/src/R/fit_scDesign3.R')
-source('testing/src/R/generate_perturbed_data.R')
+# source('testing/src/R/generate_perturbed_data.R')
 source('testing/src/R/generate_interval_perturbation.R')
 
 ## differential testing
@@ -37,17 +37,17 @@ source('testing/src/R/run_interval_evaluation.R')
 source('testing/src/R/utils.R')
 
 ## for baseline methods
-source('testing/src/R/get_cct_neglogp.R')
+source('src/R/get_cct_neglogp.R')
 source('src/R/summarize_dge_results.R')
-# 
+
 ## for argo
 source('testing/src/R/run_argo.R')
 source('testing/src/R/simple_likelihood.R')
 source('testing/src/R/simple_contrast_test_with_funGP.R')
-source('testing/src/R/generate_cc_matrix.R')
-source('testing/src/R/compute_analytical_pvalue.R')
-source('testing/src/R/derive_KLT_CI_bands.R')
-source('testing/src/R/compute_exceedence_statistics.R')
+source('src/R/generate_cc_matrix.R')
+source('src/R/compute_analytical_pvalue.R')
+source('src/R/derive_KLT_CI_bands.R')
+source('src/R/compute_exceedence_statistics.R')
 
 
 

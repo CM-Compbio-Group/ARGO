@@ -129,153 +129,160 @@ run_lamian <- function(env){
   message('running tests with Lamian')
   ## lamian requires normalized counts data as input. 
   # i'm using the official scater package to perform log normalization
-  sce <- SingleCellExperiment(assays = list(counts = env$sim_counts))
-  sce <- scater::logNormCounts(sce)
+  with(env, {
+    sce <- SingleCellExperiment(assays = list(counts = sim_counts))
+    sce <- scater::logNormCounts(sce)
+    
+    ## lamian requires an intercept term for XDE
+    pt <- sim_meta$pseudotime; names(pt) <- sim_meta$cell_id
+    design <- model.matrix(~ condition, data = sample_level_meta)
+    rownames(design) <- sample_level_meta$sampleID
+    testvar <- 2
+    
+    cell_anno <- data.frame(
+      Cell = sim_meta$cell_id,
+      Sample = as.character(sim_meta$sampleID)
+    )
+    
+    # I'm using the chisq test to generate p-values instead of using permutations
+    ## I also only care about a global differential testing result over the whole pseudotime axis
+    res.lamian <- lamian_test(expr = as.matrix(logcounts(sce)),
+                              cellanno = cell_anno,
+                              pseudotime = pt,
+                              design = as.matrix(design), 
+                              test.type= 'variable', 
+                              testvar = testvar, 
+                              test.method = 'chisq',
+                              permuiter = 1, 
+                              overall.only = T,
+                              ncores = 1) 
+    
+    ## get differential dynamic genes statistics
+    res.lamian <- res.lamian$statistics %>% 
+      rownames_to_column('gene') %>% 
+      as_tibble() %>% 
+      mutate(neglogp = -log(pval.chisq.overall)) %>%
+      dplyr::rename(fdr = fdr.chisq.overall) %>% 
+      arrange(desc(neglogp)) %>% 
+      mutate(Rank = row_number())
+    return(res.lamian)
+  })
   
-  ## lamian requires an intercept term for XDE
-  pt <- env$sim_meta$pseudotime; names(pt) <- env$sim_meta$cell_id
-  design <- model.matrix(~ condition, data = env$sample_level_meta)
-  rownames(design) <- env$sample_level_meta$sampleID
-  testvar <- 2
-  
-  cell_anno <- data.frame(
-    Cell = env$sim_meta$cell_id,
-    Sample = as.character(env$sim_meta$sampleID)
-  )
-  
-  # I'm using the chisq test to generate p-values instead of using permutations
-  ## I also only care about a global differential testing result over the whole pseudotime axis
-  res.lamian <- lamian_test(expr = as.matrix(logcounts(sce)),
-                            cellanno = cell_anno,
-                            pseudotime = pt,
-                            design = as.matrix(design), 
-                            test.type= 'variable', 
-                            testvar = testvar, 
-                            test.method = 'chisq',
-                            permuiter = 1, 
-                            overall.only = T,
-                            ncores = 1) 
-  
-  ## get differential dynamic genes statistics
-  res.lamian <- res.lamian$statistics %>% 
-    rownames_to_column('gene') %>% 
-    as_tibble() %>% 
-    mutate(neglogp = -log(pval.chisq.overall)) %>%
-    # mutate(neglogp = -log(pval.overall)) %>% 
-    dplyr::rename(fdr = fdr.chisq.overall) %>% 
-    arrange(desc(neglogp)) %>% 
-    mutate(Rank = row_number())
-  # print(res.lamian %>% filter(neglogp > -log(.05)) %>% with(table(gene %in% env$null_genes)))
-  return(res.lamian)
 }
 
 run_tradeseq <- function(env){
   message('runnig tests with tradeSeq')
   ## fit GAM and get an sce object
-  sce <- fitGAM(counts = env$sim_counts, 
-                pseudotime = env$sim_meta$pseudotime, 
-                cellWeights = matrix(1, nrow = nrow(env$sim_meta), ncol=1),
-                conditions = env$sim_meta$condition, 
-                nknots = 6, 
-                verbose = F, 
-                parallel = F)
-  
-  ## run DGE test between conditions
-  condRes <- conditionTest(sce) %>% rownames_to_column('gene')
-  res.tradeseq <- condRes %>% arrange(desc(waldStat)) %>% 
-    mutate(Rank = row_number(), 
-           neglogp = -log(pvalue + 1e-16),
-           fdr = p.adjust(pvalue, method = 'BH')) %>% as_tibble()
-  # print(res.tradeseq %>% filter(fdr < 0.05) %>% with(table(gene %in% env$null_genes)))
-  return(res.tradeseq)
+  with(env, {
+    sce <- fitGAM(counts = sim_counts, 
+                  pseudotime = sim_meta$pseudotime, 
+                  cellWeights = matrix(1, nrow = nrow(sim_meta), ncol=1),
+                  conditions = sim_meta$condition, 
+                  nknots = 6, 
+                  verbose = F, 
+                  parallel = F)
+    
+    ## run DGE test between conditions
+    condRes <- conditionTest(sce) %>% rownames_to_column('gene')
+    res.tradeseq <- condRes %>% arrange(desc(waldStat)) %>% 
+      mutate(Rank = row_number(), 
+             neglogp = -log(pvalue + 1e-16),
+             fdr = p.adjust(pvalue, method = 'BH')) %>% as_tibble()
+    return(res.tradeseq)
+  })
 }
-
+  
 run_limma <- function(env){
-  message('running tests with Limma')
-  ## prepare DGE object and design matrix
-  Y <- DGEList(counts = t(env$celltype_counts), 
-               samples = env$cell_type_meta)
-  Y <- calcNormFactors(Y)
-  
-  ## design matrix for contrast testing 
-  design <- model.matrix(~ 0 + condition_cluster, data = env$cell_type_meta)
-  colnames(design) <- gsub("^condition_cluster", "", colnames(design))
-  
-  ## apply voom-transformation to generate the precision weights
-  v <- voom(Y, design = design, plot = F)
-  # fit initial linear model
-  fit <- lmFit(v, design)
-  
-  ## extract results with contrasts
-  res.list <- list()
-  for(ctx in env$clusters){
-    contrast_formula <- glue("condition_B_{ctx} - condition_A_{ctx}")
-    con <- makeContrasts(contrasts = contrast_formula, levels = design)
-    ## fit contrast to the linear model
-    fit_contrast <- contrasts.fit(fit, contrasts =con)
-    ## run empirical bayes moderation
-    fit_ebayes <- eBayes(fit_contrast)
-    ## save results to list
-    res.list[[ctx]] <- topTable(fit_ebayes, coef = 1, n = Inf, sort.by = "none")
-  }
-  
-  res.limma <- summarize_dge_results(res.list, rownames(Y$counts), 
-                                     pval = 'P.Value', lfc = 'logFC')[['dge']]
-  # print(res.limma %>% filter(fdr < 0.05) %>% with(table(gene %in% env$null_genes)))
-  return(res.limma)
+    message('running tests with Limma')
+  with(env, {
+    ## prepare DGE object and design matrix
+    Y <- DGEList(counts = t(celltype_counts), 
+                 samples = cell_type_meta)
+    Y <- calcNormFactors(Y)
+    
+    ## design matrix for contrast testing 
+    design <- model.matrix(~ 0 + condition_cluster, data = cell_type_meta)
+    colnames(design) <- gsub("^condition_cluster", "", colnames(design))
+    
+    ## apply voom-transformation to generate the precision weights
+    v <- voom(Y, design = design, plot = F)
+    # fit initial linear model
+    fit <- lmFit(v, design)
+    
+    ## extract results with contrasts
+    res.list <- list()
+    for(ctx in clusters){
+      contrast_formula <- glue("condition_B_{ctx} - condition_A_{ctx}")
+      con <- makeContrasts(contrasts = contrast_formula, levels = design)
+      ## fit contrast to the linear model
+      fit_contrast <- contrasts.fit(fit, contrasts =con)
+      ## run empirical bayes moderation
+      fit_ebayes <- eBayes(fit_contrast)
+      ## save results to list
+      res.list[[ctx]] <- topTable(fit_ebayes, coef = 1, n = Inf, sort.by = "none")
+    }
+    
+    
+    res.limma <- summarize_dge_results(res.list, rownames(Y$counts),
+                                       pval = 'P.Value', lfc = 'logFC')[['dge']]
+    return(res.limma)
+  })
 }
 
 run_edger <- function(env){
   message('running tests with edgeR')
-  Y <- DGEList(counts = t(env$celltype_counts), 
-               samples = env$cell_type_meta)
-  Y <- calcNormFactors(Y)
-  
-  ## design matrix for contrast testing 
-  design <- model.matrix(~ 0 + condition_cluster, data = env$cell_type_meta)
-  colnames(design) <- gsub("^condition_cluster", "", colnames(design))
-  
-  ## run edgeR
-  Y <- estimateDisp(Y, design)
-  fit <- glmQLFit(Y, design)
-  
-  ## extract results with contrasts
-  res.list <- list()
-  for(ctx in env$clusters){
-    contrast_formula <- glue("condition_B_{ctx} - condition_A_{ctx}")
-    con <- makeContrasts(contrasts = contrast_formula, levels = design)
+  with(env, {
+    Y <- DGEList(counts = t(celltype_counts), 
+                 samples = cell_type_meta)
+    Y <- calcNormFactors(Y)
     
-    ## run the test and extract results
-    qlf <- glmQLFTest(fit, contrast = con)
-    ## save results to list
-    res.list[[ctx]] <- topTags(qlf, n = Inf, sort.by = "none")$table
-  }
-  
-  res.edger <- summarize_dge_results(res.list, genes = rownames(Y$counts), 
-                                     pval = 'PValue', lfc = 'logFC')[['dge']]
-  # print(res.edger %>% filter(fdr < 0.05) %>% with(table(gene %in% env$null_genes)))
-  return(res.edger) 
+    ## design matrix for contrast testing 
+    design <- model.matrix(~ 0 + condition_cluster, data = cell_type_meta)
+    colnames(design) <- gsub("^condition_cluster", "", colnames(design))
+    
+    ## run edgeR
+    Y <- estimateDisp(Y, design)
+    fit <- glmQLFit(Y, design)
+    
+    ## extract results with contrasts
+    res.list <- list()
+    for(ctx in clusters){
+      contrast_formula <- glue("condition_B_{ctx} - condition_A_{ctx}")
+      con <- makeContrasts(contrasts = contrast_formula, levels = design)
+      
+      ## run the test and extract results
+      qlf <- glmQLFTest(fit, contrast = con)
+      ## save results to list
+      res.list[[ctx]] <- topTags(qlf, n = Inf, sort.by = "none")$table
+    }
+
+    res.edger <- summarize_dge_results(res.list, genes = rownames(Y$counts),
+                                       pval = 'PValue', lfc = 'logFC')[['dge']]
+    return(res.edger)
+  })
 }
 
 run_deseq <- function(env){
   message('running tests with DESeq2')
+  with(env, {
+    dds <- DESeq2::DESeqDataSetFromMatrix(countData = t(celltype_counts),
+                                          colData = cell_type_meta,
+                                          design = ~ 0 + condition_cluster)
+    dds <- DESeq(dds)
+    res <- results(dds)
+    
+    ## gather results across all bins
+    res.list <- list()
+    for(ctx in clusters){
+      res.list[[ctx]] <- results(dds, contrast= c('condition_cluster', paste('condition_B', ctx, sep='_'),
+                                                  paste('condition_A', ctx, sep='_')))
+    }
+    
+    res.deseq <- summarize_dge_results(res.list, genes = rownames(dds),
+                                       pval = 'pvalue', lfc = 'log2FoldChange')[['dge']]
+    return(res.deseq)
+  })
   
-  dds <- DESeq2::DESeqDataSetFromMatrix(countData = t(env$celltype_counts),
-                                colData = env$cell_type_meta,
-                                design = ~ 0 + condition_cluster)
-  dds <- DESeq(dds)
-  res <- results(dds)
-  
-  ## gather results across all bins
-  res.list <- list()
-  for(ctx in env$clusters){
-    res.list[[ctx]] <- results(dds, contrast= c('condition_cluster', paste('condition_B', ctx, sep='_'),
-                                                paste('condition_A', ctx, sep='_')))
-  }
-  res.deseq <- summarize_dge_results(res.list, genes = rownames(dds), 
-                                     pval = 'pvalue', lfc = 'log2FoldChange')[['dge']]
-  # print(res.deseq %>% filter(fdr < 0.05) %>% with(table(gene %in% env$null_genes)))
-  return(res.deseq)
 }
 
 
